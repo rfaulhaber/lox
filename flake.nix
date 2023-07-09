@@ -19,7 +19,6 @@
         pname = projectName;
         version = "0.1.0";
         src = ./.;
-        # NOTE: make sure Cargo.lock is not in .gitignore
         cargoLock.lockFile = ./Cargo.lock;
       };
 
@@ -38,6 +37,10 @@
           clippy
           rust-analyzer
           rustup
+
+          # needed for cargo
+          # solves the "missing -liconv" issue
+          libiconv
         ];
       };
     });
