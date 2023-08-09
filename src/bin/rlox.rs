@@ -42,7 +42,7 @@ fn start_repl() -> RustylineResult<()> {
         let readline = rl.readline(">> ");
         match readline {
             Ok(line) => {
-                rl.add_history_entry(line.as_str());
+                let _ = rl.add_history_entry(line.as_str());
                 println!("Line: {}", line);
                 // TODO eval(line)
             }
