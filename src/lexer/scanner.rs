@@ -53,19 +53,19 @@ impl<'s> Iterator for Scanner<'s> {
                     } else {
                         match (ch, peek.unwrap()) {
                             ('!', '=') => {
-                                let _ = self.advance();
+                                self.pos += 2;
                                 Some((pos, String::from("!=")))
                             }
                             ('=', '=') => {
-                                let _ = self.advance();
-                                Some((pos, String::from("!=")))
+                                self.pos += 2;
+                                Some((pos, String::from("==")))
                             }
                             ('<', '=') => {
-                                let _ = self.advance();
+                                self.pos += 2;
                                 Some((pos, String::from("<=")))
                             }
                             ('>', '=') => {
-                                let _ = self.advance();
+                                self.pos += 2;
                                 Some((pos, String::from(">=")))
                             }
                             ('!', _) | ('=', _) | ('>', _) | ('<', _) => Some((pos, ch.into())),
@@ -166,16 +166,24 @@ mod tests {
         assert_eq!(expected, res);
     }
 
-    // #[test]
-    // fn scanner_recognizes_multi_char_operators() {
-    //     let input = "!= ==";
+    #[test]
+    fn scanner_recognizes_multi_char_operators() {
+        let input = "!= == <= >= < foo >";
 
-    //     let expected = vec!["!=", "=="];
+        let expected = vec![
+            (0, "!=".into()),
+            (3, "==".into()),
+            (6, "<=".into()),
+            (9, ">=".into()),
+            (12, "<".into()),
+            (14, "foo".into()),
+            (18, ">".into()),
+        ];
 
-    //     let res: Vec<String> = Scanner::new(input).collect();
+        let res: Vec<(usize, String)> = Scanner::new(input).collect();
 
-    //     assert_eq!(expected, res);
-    // }
+        assert_eq!(expected, res);
+    }
 
     // #[test]
     // fn scanner_lexes_words() {
