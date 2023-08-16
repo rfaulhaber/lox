@@ -42,55 +42,54 @@ impl<'s> Iterator for Scanner<'s> {
             return None;
         }
 
-        match self.advance() {
+        let next_match = match self.advance() {
             Some(item) => match item {
+                (pos, ch) if is_single_or_double_symbol(ch) => match self.peek() {
+                    Some(peek) => match (ch, peek) {
+                        ('!', '=') => Some((pos, String::from("!="))),
+                        ('=', '=') => Some((pos, String::from("=="))),
+                        ('<', '=') => Some((pos, String::from("<="))),
+                        ('>', '=') => Some((pos, String::from(">="))),
+                        ('!', _) | ('=', _) | ('>', _) | ('<', _) => Some((pos, ch.into())),
+                        _ => unreachable!(),
+                    },
+                    None => Some((pos, ch.into())),
+                },
                 (pos, ch) if is_single_symbol(ch) => Some((pos, ch.into())),
-                (pos, ch) if is_single_or_double_symbol(ch) => {
-                    let peek = self.peek();
-
-                    if peek.is_none() {
-                        Some((pos, ch.into()))
-                    } else {
-                        match (ch, peek.unwrap()) {
-                            ('!', '=') => {
-                                self.pos += 2;
-                                Some((pos, String::from("!=")))
-                            }
-                            ('=', '=') => {
-                                self.pos += 2;
-                                Some((pos, String::from("==")))
-                            }
-                            ('<', '=') => {
-                                self.pos += 2;
-                                Some((pos, String::from("<=")))
-                            }
-                            ('>', '=') => {
-                                self.pos += 2;
-                                Some((pos, String::from(">=")))
-                            }
-                            ('!', _) | ('=', _) | ('>', _) | ('<', _) => Some((pos, ch.into())),
-                            _ => unreachable!(),
-                        }
-                    }
-                }
-                // TODO take while stream is number
-                (start_pos, _) => {
-                    let word: String = self
+                (start_pos, ch) if ch.is_numeric() => {
+                    let number: String = self
                         .input
                         .chars()
                         .skip(start_pos)
-                        .take_while(|c| c.is_alphanumeric() && *c != ';')
+                        .take_while(|c| (c.is_numeric() || *c == '.') && *c != ';')
                         .map(|c| c.to_string())
                         .collect::<Vec<String>>()
                         .join("");
 
-                    self.pos = start_pos + word.len();
+                    Some((start_pos, number))
+                }
+                (start_pos, ch) if ch.is_alphabetic() => {
+                    let word: String = self
+                        .input
+                        .chars()
+                        .skip(start_pos)
+                        .take_while(|c| (c.is_alphanumeric() || *c == '_') && *c != ';')
+                        .map(|c| c.to_string())
+                        .collect::<Vec<String>>()
+                        .join("");
 
                     Some((start_pos, word))
                 }
+                (pos, ch) => unreachable!("unexpected input at position {:?}: {:?}", pos, ch),
             },
             None => None,
+        };
+
+        if let Some((pos, word)) = next_match.clone() {
+            self.pos = pos + word.len();
         }
+
+        next_match
     }
 }
 
@@ -98,7 +97,7 @@ impl<'s> Iterator for Scanner<'s> {
 fn is_single_symbol(c: char) -> bool {
     matches!(
         c,
-        '{' | '}' | '(' | ')' | '+' | ',' | ';' | '.' | '=' | '-' | '*'
+        '{' | '}' | '(' | ')' | '+' | ',' | ';' | '.' | '=' | '-' | '*' | '\n'
     )
 }
 
@@ -185,14 +184,20 @@ mod tests {
         assert_eq!(expected, res);
     }
 
-    // #[test]
-    // fn scanner_lexes_words() {
-    //     let input = "let five_hundred = 500;";
+    #[test]
+    fn scanner_lexes_words() {
+        let input = "let five_hundred = 500.1234;";
 
-    //     let expected = vec!["let", "five_hundred", "=", "500", ";"];
+        let expected = vec![
+            (0, "let".into()),
+            (4, "five_hundred".into()),
+            (17, "=".into()),
+            (19, "500.1234".into()),
+            (27, ";".into()),
+        ];
 
-    //     let res: Vec<String> = Scanner::new(input).collect();
+        let res: Vec<(usize, String)> = Scanner::new(input).collect();
 
-    //     assert_eq!(expected, res);
-    // }
+        assert_eq!(expected, res);
+    }
 }
