@@ -15,7 +15,7 @@ impl<'s> Scanner<'s> {
             .chars()
             .enumerate()
             .skip(self.pos)
-            .skip_while(|(_, c)| c.is_whitespace())
+            .skip_while(|(_, c)| *c == ' ' || *c == '\t')
             .next();
 
         if let Some((pos, _)) = next {
@@ -32,12 +32,54 @@ impl<'s> Scanner<'s> {
             None
         }
     }
+
+    fn take_word(&mut self, start: usize) -> String {
+        self.take(start, |c| (c.is_alphanumeric() || *c == '_') && *c != ';')
+    }
+
+    fn take_number(&mut self, start: usize) -> String {
+        self.take(start, |c| (c.is_numeric() || *c == '.') && *c != ';')
+    }
+
+    fn skip_line(&mut self, start: usize) {
+        let next = self
+            .input
+            .chars()
+            .enumerate()
+            .skip(start)
+            .skip_while(|(_, c)| *c != '\n')
+            .next();
+
+        if let Some((pos, _)) = next {
+            self.pos = pos;
+        }
+    }
+
+    fn take<P>(&mut self, start_pos: usize, predicate: P) -> String
+    where
+        P: FnMut(&char) -> bool,
+    {
+        self.input
+            .chars()
+            .skip(start_pos)
+            .take_while(predicate)
+            .map(|c| c.to_string())
+            .collect::<Vec<String>>()
+            .join("")
+    }
 }
 
 impl<'s> Iterator for Scanner<'s> {
     type Item = (usize, String);
 
     fn next(&mut self) -> Option<Self::Item> {
+        fn is_double_symbol(left: char, right: char) -> bool {
+            match (left, right) {
+                ('!', '=') | ('=', '=') | ('<', '=') | ('>', '=') | ('\r', '\n') => true,
+                _ => false,
+            }
+        }
+
         if self.pos > self.input.len() {
             return None;
         }
@@ -46,47 +88,36 @@ impl<'s> Iterator for Scanner<'s> {
             Some(item) => match item {
                 (pos, ch) if is_single_or_double_symbol(ch) => match self.peek() {
                     Some(peek) => match (ch, peek) {
-                        ('!', '=') => Some((pos, String::from("!="))),
-                        ('=', '=') => Some((pos, String::from("=="))),
-                        ('<', '=') => Some((pos, String::from("<="))),
-                        ('>', '=') => Some((pos, String::from(">="))),
-                        ('!', _) | ('=', _) | ('>', _) | ('<', _) => Some((pos, ch.into())),
-                        _ => unreachable!(),
+                        (left, right) if is_double_symbol(left, right) => {
+                            Some((pos, String::from_iter([ch, peek])))
+                        }
+                        ('/', '/') => {
+                            // we don't care about comments but we do capture where we saw one
+                            self.skip_line(pos);
+                            Some((pos, String::from("//")))
+                        }
+                        (ch, _) => Some((pos, ch.into())),
                     },
                     None => Some((pos, ch.into())),
                 },
                 (pos, ch) if is_single_symbol(ch) => Some((pos, ch.into())),
                 (start_pos, ch) if ch.is_numeric() => {
-                    let number: String = self
-                        .input
-                        .chars()
-                        .skip(start_pos)
-                        .take_while(|c| (c.is_numeric() || *c == '.') && *c != ';')
-                        .map(|c| c.to_string())
-                        .collect::<Vec<String>>()
-                        .join("");
-
-                    Some((start_pos, number))
+                    Some((start_pos, self.take_number(start_pos)))
                 }
+
                 (start_pos, ch) if ch.is_alphabetic() => {
-                    let word: String = self
-                        .input
-                        .chars()
-                        .skip(start_pos)
-                        .take_while(|c| (c.is_alphanumeric() || *c == '_') && *c != ';')
-                        .map(|c| c.to_string())
-                        .collect::<Vec<String>>()
-                        .join("");
-
-                    Some((start_pos, word))
+                    Some((start_pos, self.take_word(start_pos)))
                 }
-                (pos, ch) => unreachable!("unexpected input at position {:?}: {:?}", pos, ch),
+                (pos, ch) => Some((pos, ch.into())), // the lexer will discard this token if it is some invalid character
             },
             None => None,
         };
 
         if let Some((pos, word)) = next_match.clone() {
-            self.pos = pos + word.len();
+            // messy
+            if word != "//" {
+                self.pos = pos + word.len();
+            }
         }
 
         next_match
@@ -97,13 +128,13 @@ impl<'s> Iterator for Scanner<'s> {
 fn is_single_symbol(c: char) -> bool {
     matches!(
         c,
-        '{' | '}' | '(' | ')' | '+' | ',' | ';' | '.' | '=' | '-' | '*' | '\n'
+        '{' | '}' | '(' | ')' | '+' | ',' | ';' | '.' | '=' | '-' | '*' | '\n' | '/'
     )
 }
 
 #[inline]
 fn is_single_or_double_symbol(c: char) -> bool {
-    matches!(c, '!' | '=' | '<' | '>')
+    matches!(c, '!' | '=' | '<' | '>' | '\r' | '/')
 }
 
 #[cfg(test)]
@@ -194,6 +225,41 @@ mod tests {
             (17, "=".into()),
             (19, "500.1234".into()),
             (27, ";".into()),
+        ];
+
+        let res: Vec<(usize, String)> = Scanner::new(input).collect();
+
+        assert_eq!(expected, res);
+    }
+
+    #[test]
+    fn scanner_breaks_newlines() {
+        let input = "foo\nbar\r\n\n\nbaz";
+        let expected = vec![
+            (0, "foo".into()),
+            (3, "\n".into()),
+            (4, "bar".into()),
+            (7, "\r\n".into()),
+            (9, "\n".into()),
+            (10, "\n".into()),
+            (11, "baz".into()),
+        ];
+
+        let res: Vec<(usize, String)> = Scanner::new(input).collect();
+
+        assert_eq!(expected, res);
+    }
+
+    #[test]
+    fn scanner_ingests_comments_and_slashes() {
+        let input = "// this is a comment\nfoobar/bazquux";
+
+        let expected = vec![
+            (0, "//".into()),
+            (20, "\n".into()),
+            (21, "foobar".into()),
+            (27, "/".into()),
+            (28, "bazquux".into()),
         ];
 
         let res: Vec<(usize, String)> = Scanner::new(input).collect();
