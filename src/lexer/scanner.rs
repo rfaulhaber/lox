@@ -55,6 +55,21 @@ impl<'s> Scanner<'s> {
         }
     }
 
+    fn skip_multi_line_comment(&mut self, start: usize) {
+        let mut iter = self.input.chars().enumerate().skip(start).peekable();
+
+        while let Some((_, ch)) = iter.next() {
+            if ch == '*' {
+                if let Some((pos, peek)) = iter.peek() {
+                    if *peek == '/' {
+                        self.pos = *pos + 1;
+                        break;
+                    }
+                }
+            }
+        }
+    }
+
     fn take<P>(&mut self, start_pos: usize, predicate: P) -> String
     where
         P: FnMut(&char) -> bool,
@@ -86,15 +101,25 @@ impl<'s> Iterator for Scanner<'s> {
 
         let next_match = match self.advance() {
             Some(item) => match item {
+                (pos, '"') => {
+                    let string = self.take(pos + 1, |c| *c != '"');
+                    Some((pos, String::from_iter(["\"".into(), string, "\"".into()])))
+                }
+                (_, '\r') | (_, '\n') => self.next(),
                 (pos, ch) if is_single_or_double_symbol(ch) => match self.peek() {
                     Some(peek) => match (ch, peek) {
                         (left, right) if is_double_symbol(left, right) => {
                             Some((pos, String::from_iter([ch, peek])))
                         }
+                        // single-line comments
                         ('/', '/') => {
-                            // we don't care about comments but we do capture where we saw one
                             self.skip_line(pos);
-                            Some((pos, String::from("//")))
+                            self.next()
+                        }
+                        // multi-line comments
+                        ('/', '*') => {
+                            self.skip_multi_line_comment(pos);
+                            self.next()
                         }
                         (ch, _) => Some((pos, ch.into())),
                     },
@@ -217,10 +242,10 @@ mod tests {
 
     #[test]
     fn scanner_lexes_words() {
-        let input = "let five_hundred = 500.1234;";
+        let input = "var five_hundred = 500.1234;";
 
         let expected = vec![
-            (0, "let".into()),
+            (0, "var".into()),
             (4, "five_hundred".into()),
             (17, "=".into()),
             (19, "500.1234".into()),
@@ -235,14 +260,21 @@ mod tests {
     #[test]
     fn scanner_breaks_newlines() {
         let input = "foo\nbar\r\n\n\nbaz";
+        let expected = vec![(0, "foo".into()), (4, "bar".into()), (11, "baz".into())];
+
+        let res: Vec<(usize, String)> = Scanner::new(input).collect();
+
+        assert_eq!(expected, res);
+    }
+
+    #[test]
+    fn scanner_ingests_slashes_and_not_comments() {
+        let input = "// this is a comment\nfoobar/bazquux";
+
         let expected = vec![
-            (0, "foo".into()),
-            (3, "\n".into()),
-            (4, "bar".into()),
-            (7, "\r\n".into()),
-            (9, "\n".into()),
-            (10, "\n".into()),
-            (11, "baz".into()),
+            (21, "foobar".into()),
+            (27, "/".into()),
+            (28, "bazquux".into()),
         ];
 
         let res: Vec<(usize, String)> = Scanner::new(input).collect();
@@ -251,16 +283,28 @@ mod tests {
     }
 
     #[test]
-    fn scanner_ingests_comments_and_slashes() {
-        let input = "// this is a comment\nfoobar/bazquux";
+    fn scanner_takes_strings() {
+        let input = r#"foo = "this is a string literal""#;
 
         let expected = vec![
-            (0, "//".into()),
-            (20, "\n".into()),
-            (21, "foobar".into()),
-            (27, "/".into()),
-            (28, "bazquux".into()),
+            (0, "foo".into()),
+            (4, "=".into()),
+            (6, r#""this is a string literal""#.into()),
         ];
+
+        let res: Vec<(usize, String)> = Scanner::new(input).collect();
+
+        assert_eq!(expected, res);
+    }
+
+    #[test]
+    fn scanner_skips_multi_line_comments() {
+        let input = r#"/* this is a multi-line
+comment and
+I can put anything here: foo + 1 2 3 */
+1 + foo"#;
+
+        let expected = vec![(76, "1".into()), (78, "+".into()), (80, "foo".into())];
 
         let res: Vec<(usize, String)> = Scanner::new(input).collect();
 

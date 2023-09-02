@@ -1,13 +1,13 @@
 use crate::source::Span;
 
-#[derive(Debug)]
-pub(crate) struct Token<'t> {
-    kind: TokenType,
-    literal: Option<&'t str>,
-    location: Span,
+#[derive(Debug, PartialEq)]
+pub(crate) struct Token {
+    pub kind: TokenType,
+    pub literal: String,
+    pub location: Span,
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub(crate) enum TokenType {
     LeftParen,
     RightParen,
@@ -50,6 +50,4 @@ pub(crate) enum TokenType {
     True,
     Var,
     While,
-
-    EOF,
 }
