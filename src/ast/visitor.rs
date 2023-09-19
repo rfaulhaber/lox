@@ -1,6 +1,6 @@
 use super::expr::{BinaryOperator, Expr, Literal, UnaryOperator};
 
-pub(crate) trait Visitor<'ast>: Sized {
+pub trait Visitor<'ast>: Sized {
     fn visit_expr(&mut self, expr: &'ast Expr<'ast>) {
         walk_expr(self, expr);
     }
@@ -19,18 +19,22 @@ pub(crate) trait Visitor<'ast>: Sized {
     }
 
     fn visit_literal(&mut self, literal: &'ast Literal<'ast>);
+
+    fn visit_grouping_expr(&mut self, expr: &'ast Expr<'ast>) {
+        walk_expr(self, expr);
+    }
 }
 
-fn walk_expr<'ast, V: Visitor<'ast>>(visitor: &mut V, expr: &'ast Expr<'ast>) {
+pub fn walk_expr<'ast, V: Visitor<'ast>>(visitor: &mut V, expr: &'ast Expr<'ast>) {
     match expr {
         Expr::Literal(l) => visitor.visit_literal(l),
         Expr::Unary(op, expr) => visitor.visit_unary_expr(op.clone(), expr),
         Expr::Binary(left, op, right) => visitor.visit_binary_expr(left, op.clone(), right),
-        Expr::Grouping(expr) => visitor.visit_expr(expr),
+        Expr::Grouping(expr) => visitor.visit_grouping_expr(expr),
     }
 }
 
-fn walk_literal<'ast, V: Visitor<'ast>>(visitor: &mut V, literal: &'ast Literal<'ast>) {
+pub fn walk_literal<'ast, V: Visitor<'ast>>(visitor: &mut V, literal: &'ast Literal<'ast>) {
     match literal {
         Literal::Number(_) => todo!(),
         Literal::String(_) => todo!(),
@@ -39,7 +43,7 @@ fn walk_literal<'ast, V: Visitor<'ast>>(visitor: &mut V, literal: &'ast Literal<
     }
 }
 
-fn walk_unary_expr<'ast, V: Visitor<'ast>>(
+pub fn walk_unary_expr<'ast, V: Visitor<'ast>>(
     visitor: &mut V,
     op: UnaryOperator,
     expr: &'ast Expr<'ast>,
@@ -47,7 +51,7 @@ fn walk_unary_expr<'ast, V: Visitor<'ast>>(
     visitor.visit_expr(expr);
 }
 
-fn walk_binary_expr<'ast, V: Visitor<'ast>>(
+pub fn walk_binary_expr<'ast, V: Visitor<'ast>>(
     visitor: &mut V,
     left_expr: &'ast Expr<'ast>,
     op: BinaryOperator,
@@ -56,6 +60,8 @@ fn walk_binary_expr<'ast, V: Visitor<'ast>>(
     visitor.visit_expr(left_expr);
     visitor.visit_expr(right_expr);
 }
+
+// sanity check to ensure visitor is implemented correctly
 
 #[cfg(test)]
 mod tests {
@@ -69,9 +75,7 @@ mod tests {
 
     impl<'v> Visitor<'v> for TestVisitor {
         fn visit_expr(&mut self, expr: &'v Expr<'v>) {
-            self.out.push("(".into());
             walk_expr(self, expr);
-            self.out.push(")".into());
         }
 
         fn visit_binary_expr(
@@ -80,8 +84,9 @@ mod tests {
             op: BinaryOperator,
             right: &'v Expr<'v>,
         ) {
-            self.out.push("*".into());
+            self.out.push("(*".into());
             walk_binary_expr(self, left, op, right);
+            self.out.push(")".into());
         }
 
         fn visit_literal(&mut self, literal: &'v Literal<'v>) {
@@ -95,8 +100,15 @@ mod tests {
         }
 
         fn visit_unary_expr(&mut self, op: UnaryOperator, expr: &'v Expr<'v>) {
-            self.out.push("-".into());
+            self.out.push("(- ".into());
             walk_unary_expr(self, op, expr);
+            self.out.push(")".into());
+        }
+
+        fn visit_grouping_expr(&mut self, expr: &'v Expr<'v>) {
+            self.out.push("(group ".into());
+            walk_expr(self, expr);
+            self.out.push(")".into());
         }
     }
 
@@ -119,6 +131,6 @@ mod tests {
 
         v.visit_expr(root);
 
-        assert_eq!(v.out.join(" "), "( * ( - 123 ) ( 45.67 ) )");
+        assert_eq!(v.out.join(""), "(*(- 123)(group 45.67))");
     }
 }
