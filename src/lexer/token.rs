@@ -1,14 +1,14 @@
 use crate::source::Span;
 
-#[derive(Debug, PartialEq)]
-pub(crate) struct Token {
+#[derive(Debug, Clone, PartialEq)]
+pub struct Token {
     pub kind: TokenType,
     pub literal: String,
     pub location: Span,
 }
 
-#[derive(Debug, PartialEq)]
-pub(crate) enum TokenType {
+#[derive(Debug, Clone, PartialEq)]
+pub enum TokenType {
     LeftParen,
     RightParen,
     LeftBrace,
