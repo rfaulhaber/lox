@@ -1,12 +1,16 @@
 use crate::{
-    ast::expr::Expr,
-    lexer::{lexer::Lexer, token::Token},
+    ast::expr::{BinaryOperator, Expr},
+    lexer::{
+        lexer::Lexer,
+        token::{Token, TokenType},
+    },
 };
 
 #[derive(Debug)]
 pub struct Parser {
     tokens: Vec<Token>,
     current: usize,
+    arena: bumpalo::Bump,
 }
 
 pub type ParseResult<'r> = Result<Expr<'r>, ParseError>;
@@ -19,6 +23,7 @@ impl<'l> From<Lexer<'l>> for Parser {
         Self {
             tokens: value.into_iter().collect(),
             current: 0,
+            arena: bumpalo::Bump::new(),
         }
     }
 }
@@ -36,6 +41,18 @@ impl<'r> Parser {
 
     fn equality(&mut self) -> ParseResult<'r> {
         let expr = self.comparison()?;
+
+        let op = match self.advance().unwrap().kind {
+            TokenType::BangEqual => BinaryOperator::Neq,
+            TokenType::EqualEqual => BinaryOperator::Eq,
+            _ => unreachable!(),
+        };
+
+        let right = self.comparison()?;
+
+        let res = Expr::Binary(Box::new(expr), op, Box::new(right));
+
+        Ok(res)
     }
 
     fn comparison(&mut self) -> ParseResult<'r> {

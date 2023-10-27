@@ -1,9 +1,9 @@
 #[derive(Debug)]
 pub enum Expr<'e> {
     Literal(Literal<'e>),
-    Unary(UnaryOperator, &'e Expr<'e>),
-    Binary(&'e Expr<'e>, BinaryOperator, &'e Expr<'e>),
-    Grouping(&'e Expr<'e>),
+    Unary(UnaryOperator, Box<Expr<'e>>),
+    Binary(Box<Expr<'e>>, BinaryOperator, Box<Expr<'e>>),
+    Grouping(Box<Expr<'e>>),
 }
 
 #[derive(Debug)]

@@ -1,7 +1,7 @@
 use miette::SourceSpan;
 
-#[derive(Debug, PartialEq)]
-pub(crate) struct Span {
+#[derive(Debug, Clone, PartialEq)]
+pub struct Span {
     pub offset: usize,
     pub length: usize,
 }
