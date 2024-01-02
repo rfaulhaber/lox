@@ -1,52 +1,53 @@
-use crate::lexer::lexer::Lexer;
+use crate::{
+    ast::expr::{BinaryOperator, Expr},
+    lexer::{
+        lexer::Lexer,
+        token::{Token, TokenType},
+    },
+};
 use thiserror::Error;
 
-pub struct NodeId(pub usize);
-
-pub enum NodeType {
-    Float,
-    Int,
-    String,
-    True,
-    False,
-    Nil,
-
-    // unary operators
-    Neg,
-    Not,
-
-    // binary operators
-    Eq,
-    Neq,
-    Lt,
-    Lte,
-    Gt,
-    Gte,
-    Add,
-    Sub,
-    Mul,
-    Div,
-
-    Unary {
-        op: NodeId,
-        expr: NodeId,
-    },
-
-    Binary {
-        left: NodeId,
-        op: NodeId,
-        right: NodeId,
-    },
-
-    Grouping {
-        expr: NodeId,
-    },
-}
+type ParseResult = Result<Expr, ParserError>;
 
 #[derive(Debug, Error)]
 pub enum ParserError {}
 
 pub struct Parser<'p> {
     lexer: Lexer<'p>,
-    errors: Vec<ParserError>,
+}
+
+impl<'p> Parser<'p> {
+    pub fn parse(&mut self) -> ParseResult {
+        self.parse_expr()
+    }
+
+    fn parse_expr(&mut self) -> ParseResult {
+        self.parse_equality()
+    }
+
+    fn parse_equality(&mut self) -> ParseResult {
+        let mut left = self.parse_comparison()?;
+
+        while let Some(token) = self.lexer.next() {
+            if matches!(token.kind, TokenType::BangEqual | TokenType::EqualEqual) {
+                let op = if token.kind == TokenType::BangEqual {
+                    BinaryOperator::Neq
+                } else {
+                    BinaryOperator::Eq
+                };
+
+                let right = self.parse_comparison()?;
+
+                left = Expr::Binary(Box::new(left), op, Box::new(right));
+            } else {
+                break;
+            }
+        }
+
+        Ok(left)
+    }
+
+    fn parse_comparison(&mut self) -> ParseResult {
+        todo!();
+    }
 }

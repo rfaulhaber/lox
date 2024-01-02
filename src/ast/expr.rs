@@ -1,15 +1,15 @@
 #[derive(Debug)]
-pub enum Expr<'e> {
-    Literal(Literal<'e>),
-    Unary(UnaryOperator, Box<Expr<'e>>),
-    Binary(Box<Expr<'e>>, BinaryOperator, Box<Expr<'e>>),
-    Grouping(Box<Expr<'e>>),
+pub enum Expr {
+    Literal(Literal),
+    Unary(UnaryOperator, Box<Expr>),
+    Binary(Box<Expr>, BinaryOperator, Box<Expr>),
+    Grouping(Box<Expr>),
 }
 
 #[derive(Debug)]
-pub enum Literal<'l> {
+pub enum Literal {
     Number(Number),
-    String(&'l str),
+    String(String),
     Bool(Bool),
     Nil,
 }
