@@ -6,7 +6,7 @@ use super::{
 };
 
 #[derive(Debug)]
-pub(crate) struct Lexer<'l> {
+pub struct Lexer<'l> {
     scanner: Scanner<'l>,
 }
 
