@@ -23,7 +23,7 @@ impl Visitor for AstPrinter {
             Expr::Literal(l) => self.visit_literal(l),
             Expr::Unary(op, rhs) => self.visit_unary_expr(op, *rhs),
             Expr::Binary(lhs, op, rhs) => self.visit_binary_expr(*lhs, op, *rhs),
-            Expr::Grouping(expr) => self.visit_expr(*expr),
+            Expr::Grouping(expr) => self.visit_grouping_expr(*expr),
         }
     }
 
@@ -39,11 +39,7 @@ impl Visitor for AstPrinter {
 
         let expr = self.visit_expr(expr);
 
-        let mut output = String::from(op_str);
-
-        output.push_str(&expr);
-
-        output
+        format!("({} {})", op_str, &expr)
     }
 
     fn visit_binary_expr(
@@ -69,14 +65,7 @@ impl Visitor for AstPrinter {
 
         let right_str = self.visit_expr(right);
 
-        let mut output = String::from(op_str);
-
-        output.push(' ');
-        output.push_str(&left_str);
-        output.push(' ');
-        output.push_str(&right_str);
-
-        output
+        format!("({} {} {})", op_str, left_str, right_str)
     }
 
     fn visit_literal(&mut self, literal: super::expr::Literal) -> Self::Value {
@@ -95,13 +84,9 @@ impl Visitor for AstPrinter {
     }
 
     fn visit_grouping_expr(&mut self, expr: super::expr::Expr) -> Self::Value {
-        let mut output = String::from("group");
-
         let expr = self.visit_expr(expr);
 
-        output.push_str(&expr);
-
-        output
+        format!("(group {})", expr)
     }
 }
 
