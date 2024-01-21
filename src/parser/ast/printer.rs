@@ -1,5 +1,7 @@
 use super::{
     expr::{BinaryOperator, Expr, Literal, Number, UnaryOperator},
+    program::Program,
+    stmt::Stmt,
     visitor::Visitor,
 };
 
@@ -10,15 +12,31 @@ impl AstPrinter {
         Self {}
     }
 
-    pub fn print(&mut self, ast: Expr) -> String {
-        self.visit_expr(ast)
+    pub fn print(&mut self, ast: Program) -> String {
+        self.visit_program(ast)
     }
 }
 
 impl Visitor for AstPrinter {
     type Value = String;
 
-    fn visit_expr(&mut self, expr: super::expr::Expr) -> Self::Value {
+    fn visit_program(&mut self, program: Program) -> Self::Value {
+        program
+            .stmts
+            .into_iter()
+            .map(|stmt| self.visit_stmt(stmt))
+            .collect::<Vec<String>>()
+            .concat()
+    }
+
+    fn visit_stmt(&mut self, stmt: Stmt) -> Self::Value {
+        match stmt {
+            Stmt::Expr(expr) => self.visit_expr(expr),
+            Stmt::Print(expr) => format!("print {}", self.visit_expr(expr)),
+        }
+    }
+
+    fn visit_expr(&mut self, expr: Expr) -> Self::Value {
         match expr {
             Expr::Literal(l) => self.visit_literal(l),
             Expr::Unary(op, rhs) => self.visit_unary_expr(op, *rhs),
@@ -27,11 +45,7 @@ impl Visitor for AstPrinter {
         }
     }
 
-    fn visit_unary_expr(
-        &mut self,
-        op: super::expr::UnaryOperator,
-        expr: super::expr::Expr,
-    ) -> Self::Value {
+    fn visit_unary_expr(&mut self, op: super::expr::UnaryOperator, expr: Expr) -> Self::Value {
         let op_str = match op {
             UnaryOperator::Neg => "-",
             UnaryOperator::Not => "!",
@@ -44,9 +58,9 @@ impl Visitor for AstPrinter {
 
     fn visit_binary_expr(
         &mut self,
-        left: super::expr::Expr,
+        left: Expr,
         op: super::expr::BinaryOperator,
-        right: super::expr::Expr,
+        right: Expr,
     ) -> Self::Value {
         let left_str = self.visit_expr(left);
 
@@ -83,7 +97,7 @@ impl Visitor for AstPrinter {
         }
     }
 
-    fn visit_grouping_expr(&mut self, expr: super::expr::Expr) -> Self::Value {
+    fn visit_grouping_expr(&mut self, expr: Expr) -> Self::Value {
         let expr = self.visit_expr(expr);
 
         format!("(group {})", expr)

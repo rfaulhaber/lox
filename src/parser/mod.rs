@@ -1,15 +1,19 @@
-use std::iter::Peekable;
+pub mod ast;
 
-use crate::{
-    ast::expr::{BinaryOperator, Expr, Literal, Number, UnaryOperator},
-    lexer::{
-        lexer::Lexer,
-        token::{Token, TokenType},
-    },
+use self::ast::{
+    expr::{BinaryOperator, Expr, Literal, Number, UnaryOperator},
+    program::Program,
+    stmt::Stmt,
 };
+
+use crate::lexer::{
+    lexer::Lexer,
+    token::{Token, TokenType},
+};
+use std::iter::Peekable;
 use thiserror::Error;
 
-type ParseResult = Result<Expr, ParseError>;
+type ParseResult<T> = Result<T, ParseError>;
 
 #[derive(Debug, Clone, Error)]
 pub enum ParseError {
@@ -17,7 +21,7 @@ pub enum ParseError {
     CouldNotParseInt(#[from] std::num::ParseIntError),
     #[error("Could not parse float")]
     CouldNotParseFloat(#[from] std::num::ParseFloatError),
-    #[error("Unexpected token. Expected one of {0} but got {1}")]
+    #[error("Unexpected token. Expected {0} but got {1}")]
     UnexpectedToken(TokenType, TokenType),
     #[error("Unexpected end of input")]
     UnexpectedEndOfInput,
@@ -35,15 +39,55 @@ impl<'p> Parser<'p> {
         }
     }
 
-    pub fn parse(&mut self) -> ParseResult {
-        self.parse_expr()
+    pub fn parse(&mut self) -> ParseResult<Program> {
+        self.parse_program()
     }
 
-    fn parse_expr(&mut self) -> ParseResult {
+    fn parse_program(&mut self) -> ParseResult<Program> {
+        let stmts = {
+            let mut stmts = Vec::new();
+
+            while self.lexer.peek().is_some() {
+                stmts.push(self.parse_stmt()?)
+            }
+
+            stmts
+        };
+
+        Ok(Program { stmts })
+    }
+
+    fn parse_stmt(&mut self) -> ParseResult<Stmt> {
+        match self.lexer.peek() {
+            Some(t) if t.kind == TokenType::Print => self.parse_print_stmt(),
+            Some(_) => self.parse_expr_stmt(),
+            None => todo!(),
+        }
+    }
+
+    fn parse_print_stmt(&mut self) -> ParseResult<Stmt> {
+        let _ = self.lexer.next();
+
+        let expr = self.parse_expr()?;
+
+        self.consume_single_token(TokenType::Semicolon)?;
+
+        Ok(Stmt::Print(expr))
+    }
+
+    fn parse_expr_stmt(&mut self) -> ParseResult<Stmt> {
+        let expr = self.parse_expr()?;
+
+        self.consume_single_token(TokenType::Semicolon)?;
+
+        Ok(Stmt::Expr(expr))
+    }
+
+    fn parse_expr(&mut self) -> ParseResult<Expr> {
         self.parse_equality()
     }
 
-    fn parse_equality(&mut self) -> ParseResult {
+    fn parse_equality(&mut self) -> ParseResult<Expr> {
         let mut left = self.parse_comparison()?;
 
         while self
@@ -67,7 +111,7 @@ impl<'p> Parser<'p> {
         Ok(left)
     }
 
-    fn parse_comparison(&mut self) -> ParseResult {
+    fn parse_comparison(&mut self) -> ParseResult<Expr> {
         let mut left = self.parse_term()?;
 
         while self.lexer.peek().is_some_and(|t| {
@@ -97,7 +141,7 @@ impl<'p> Parser<'p> {
         Ok(left)
     }
 
-    fn parse_term(&mut self) -> ParseResult {
+    fn parse_term(&mut self) -> ParseResult<Expr> {
         let mut left = self.parse_factor()?;
 
         while self
@@ -121,7 +165,7 @@ impl<'p> Parser<'p> {
         Ok(left)
     }
 
-    fn parse_factor(&mut self) -> ParseResult {
+    fn parse_factor(&mut self) -> ParseResult<Expr> {
         let mut left = self.parse_unary()?;
 
         while self
@@ -145,7 +189,7 @@ impl<'p> Parser<'p> {
         Ok(left)
     }
 
-    fn parse_unary(&mut self) -> ParseResult {
+    fn parse_unary(&mut self) -> ParseResult<Expr> {
         if self
             .lexer
             .peek()
@@ -167,7 +211,7 @@ impl<'p> Parser<'p> {
         self.parse_primary()
     }
 
-    fn parse_primary(&mut self) -> ParseResult {
+    fn parse_primary(&mut self) -> ParseResult<Expr> {
         match self.lexer.next() {
             Some(t) => match t.kind {
                 TokenType::False => Ok(Expr::Literal(Literal::Bool(false))),
@@ -199,7 +243,7 @@ impl<'p> Parser<'p> {
     }
 }
 
-fn try_parse_number(t: Token) -> ParseResult {
+fn try_parse_number(t: Token) -> ParseResult<Expr> {
     if t.literal.contains(".") {
         t.literal
             .parse::<f64>()
@@ -225,15 +269,17 @@ mod tests {
         let literal_2 = Expr::Literal(Literal::Number(Number::Int(2)));
         let literal_3 = Expr::Literal(Literal::Number(Number::Int(3)));
 
-        let expected = Expr::Binary(
-            Box::new(Expr::Unary(UnaryOperator::Neg, Box::new(literal_1))),
-            BinaryOperator::Mul,
-            Box::new(Expr::Grouping(Box::new(Expr::Binary(
-                Box::new(literal_2),
-                BinaryOperator::Add,
-                Box::new(literal_3),
-            )))),
-        );
+        let expected = Program {
+            stmts: vec![Stmt::Expr(Expr::Binary(
+                Box::new(Expr::Unary(UnaryOperator::Neg, Box::new(literal_1))),
+                BinaryOperator::Mul,
+                Box::new(Expr::Grouping(Box::new(Expr::Binary(
+                    Box::new(literal_2),
+                    BinaryOperator::Add,
+                    Box::new(literal_3),
+                )))),
+            ))],
+        };
 
         assert_eq!(result.unwrap(), expected);
     }

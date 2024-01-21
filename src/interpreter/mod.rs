@@ -3,13 +3,18 @@ use thiserror::Error;
 use std::{
     cmp::Ordering,
     fmt::Display,
+    io::{BufWriter, Write},
     ops::{Add, Div, Mul, Sub},
 };
 
-use crate::ast::{
+use crate::parser::ast::{
     expr::{BinaryOperator, Expr, Literal, Number, UnaryOperator},
+    program::Program,
+    stmt::Stmt,
     visitor::Visitor,
 };
+
+// TODO implement proc macro
 
 macro_rules! binary_number_arithmetic_impl {
     ($func_name:ident, $op_name:ident) => {
@@ -95,18 +100,53 @@ pub enum EvalError {
     TypeMismatch(String, LoxValue, LoxValue),
 }
 
-pub struct Interpreter {}
+// TODO implement builder pattern
 
-impl Interpreter {
-    pub fn eval(&mut self, expr: Expr) -> EvalResult {
-        self.visit_expr(expr)
+#[derive(Debug)]
+pub struct Interpreter<W: std::io::Write> {
+    buffer_out: BufWriter<W>,
+}
+
+impl<W> Interpreter<W> where W: std::io::Write {
+    pub fn new(out: W) -> Self {
+        Self {
+            buffer_out: BufWriter::new(out)
+        }
+    }
+
+    pub fn eval(&mut self, program: Program) -> EvalResult {
+        self.visit_program(program)
     }
 }
 
 struct EvalVisitor {}
 
-impl Visitor for Interpreter {
+impl<W: std::io::Write> Visitor for Interpreter<W> {
     type Value = EvalResult;
+
+    fn visit_program(&mut self, program: Program) -> Self::Value {
+        for stmt in program.stmts {
+            self.visit_stmt(stmt)?;
+        }
+
+        // this is a departure from the book
+        // it's easier to implement 'nil' rather than 'void', however I should go through the trouble of implementing void
+        Ok(LoxValue::Nil)
+    }
+
+    fn visit_stmt(&mut self, stmt: Stmt) -> Self::Value {
+        match stmt {
+            Stmt::Expr(expr) => self.visit_expr(expr),
+            Stmt::Print(expr) => {
+                let expr = self.visit_expr(expr)?;
+
+                // TODO eval should have writer
+                writeln!(self.buffer_out, "{}", expr);
+
+                Ok(LoxValue::Nil)
+            }
+        }
+    }
 
     fn visit_expr(&mut self, expr: Expr) -> Self::Value {
         match expr {
@@ -194,7 +234,9 @@ mod tests {
 
         let expected = LoxValue::Float(-5617.41);
 
-        let mut interpreter = Interpreter {};
+        let mut output = Vec::new();
+
+        let mut interpreter = Interpreter::new(&mut output);
 
         let result = interpreter.eval(ast);
 

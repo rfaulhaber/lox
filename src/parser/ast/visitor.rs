@@ -1,7 +1,15 @@
-use super::expr::{BinaryOperator, Expr, Literal, UnaryOperator};
+use super::{
+    expr::{BinaryOperator, Expr, Literal, UnaryOperator},
+    program::Program,
+    stmt::Stmt,
+};
 
 pub trait Visitor: Sized {
     type Value;
+
+    fn visit_program(&mut self, program: Program) -> Self::Value;
+
+    fn visit_stmt(&mut self, stmt: Stmt) -> Self::Value;
 
     fn visit_expr(&mut self, expr: Expr) -> Self::Value;
 
