@@ -4,12 +4,8 @@ use super::{
     stmt::Stmt,
 };
 
-pub trait Visitor: Sized {
+pub trait ExprVisitor: Sized {
     type Value;
-
-    fn visit_program(&mut self, program: Program) -> Self::Value;
-
-    fn visit_stmt(&mut self, stmt: Stmt) -> Self::Value;
 
     fn visit_expr(&mut self, expr: Expr) -> Self::Value;
 
@@ -20,4 +16,10 @@ pub trait Visitor: Sized {
     fn visit_literal(&mut self, literal: Literal) -> Self::Value;
 
     fn visit_grouping_expr(&mut self, expr: Expr) -> Self::Value;
+}
+
+pub trait StmtVisitor: Sized + ExprVisitor {
+    fn visit_program(&mut self, program: Program);
+
+    fn visit_stmt(&mut self, stmt: Stmt);
 }

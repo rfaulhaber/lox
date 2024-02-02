@@ -1,40 +1,48 @@
+use std::io::{BufWriter, Write};
+
 use super::{
     expr::{BinaryOperator, Expr, Literal, Number, UnaryOperator},
     program::Program,
     stmt::Stmt,
-    visitor::Visitor,
+    visitor::{ExprVisitor, StmtVisitor},
 };
 
-pub struct AstPrinter;
+pub struct AstPrinter<W: std::io::Write> {
+    writer: W,
+}
 
-impl AstPrinter {
-    pub fn new() -> Self {
-        Self {}
+impl<W: std::io::Write> AstPrinter<W> {
+    pub fn new(writer: W) -> AstPrinter<W> {
+        Self { writer }
     }
 
-    pub fn print(&mut self, ast: Program) -> String {
-        self.visit_program(ast)
+    pub fn get_writer(&mut self) -> &W {
+        &self.writer
+    }
+
+    pub fn print(&mut self, ast: Program) {
+        self.visit_program(ast);
     }
 }
 
-impl Visitor for AstPrinter {
-    type Value = String;
-
-    fn visit_program(&mut self, program: Program) -> Self::Value {
+impl<W: std::io::Write> StmtVisitor for AstPrinter<W> {
+    fn visit_program(&mut self, program: Program) {
         program
             .stmts
             .into_iter()
-            .map(|stmt| self.visit_stmt(stmt))
-            .collect::<Vec<String>>()
-            .concat()
+            .for_each(|stmt| self.visit_stmt(stmt))
     }
 
-    fn visit_stmt(&mut self, stmt: Stmt) -> Self::Value {
-        match stmt {
+    fn visit_stmt(&mut self, stmt: Stmt) {
+        let stmt = match stmt {
             Stmt::Expr(expr) => self.visit_expr(expr),
-            Stmt::Print(expr) => format!("print {}", self.visit_expr(expr)),
-        }
+            Stmt::Print(expr) => self.visit_expr(expr),
+        };
     }
+}
+
+impl<W: std::io::Write> ExprVisitor for AstPrinter<W> {
+    type Value = String;
 
     fn visit_expr(&mut self, expr: Expr) -> Self::Value {
         match expr {
@@ -114,11 +122,13 @@ mod tests {
     fn prints_simple_ast() {
         let ast = Parser::new(Lexer::new("-123 * (45.67)")).parse().unwrap();
 
-        let expected = "(* (- 123) (group 45.67))";
+        let expected = String::from("(* (- 123) (group 45.67))");
 
-        let mut printer = AstPrinter::new();
+        let mut printer = AstPrinter::new(Vec::new());
 
-        let result = printer.print(ast);
+        printer.print(ast);
+
+        let result = String::from_utf8(printer.get_writer().clone()).unwrap();
 
         assert_eq!(result, expected);
     }

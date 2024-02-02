@@ -11,7 +11,7 @@ use crate::parser::ast::{
     expr::{BinaryOperator, Expr, Literal, Number, UnaryOperator},
     program::Program,
     stmt::Stmt,
-    visitor::Visitor,
+    visitor::{ExprVisitor, StmtVisitor},
 };
 
 // TODO implement proc macro
@@ -103,50 +103,72 @@ pub enum EvalError {
 // TODO implement builder pattern
 
 #[derive(Debug)]
-pub struct Interpreter<W: std::io::Write> {
-    buffer_out: BufWriter<W>,
+pub struct Interpreter<R: std::io::BufRead, W: std::io::Write> {
+    reader: R,
+    writer: W,
+    state: InterpreterState,
 }
 
-impl<W> Interpreter<W> where W: std::io::Write {
-    pub fn new(out: W) -> Self {
+#[derive(Debug)]
+enum InterpreterState {
+    Ready,
+    Evaluating,
+    Done,
+    Error,
+}
+
+impl<R: std::io::BufRead, W: std::io::Write> Interpreter<R, W>
+where
+    W: std::io::Write,
+{
+    pub fn new(reader: R, writer: W) -> Self {
         Self {
-            buffer_out: BufWriter::new(out)
+            reader,
+            writer,
+            state: InterpreterState::Ready,
         }
     }
 
-    pub fn eval(&mut self, program: Program) -> EvalResult {
+    pub fn eval(&mut self, program: Program) {
         self.visit_program(program)
+    }
+
+    pub fn get_writer(&mut self) -> &W {
+        &self.writer
     }
 }
 
 struct EvalVisitor {}
 
-impl<W: std::io::Write> Visitor for Interpreter<W> {
-    type Value = EvalResult;
-
-    fn visit_program(&mut self, program: Program) -> Self::Value {
+impl<R: std::io::BufRead, W: std::io::Write> StmtVisitor for Interpreter<R, W> {
+    fn visit_program(&mut self, program: Program) {
         for stmt in program.stmts {
-            self.visit_stmt(stmt)?;
+            self.visit_stmt(stmt);
         }
-
-        // this is a departure from the book
-        // it's easier to implement 'nil' rather than 'void', however I should go through the trouble of implementing void
-        Ok(LoxValue::Nil)
     }
 
-    fn visit_stmt(&mut self, stmt: Stmt) -> Self::Value {
+    fn visit_stmt(&mut self, stmt: Stmt) {
         match stmt {
             Stmt::Expr(expr) => self.visit_expr(expr),
             Stmt::Print(expr) => {
-                let expr = self.visit_expr(expr)?;
+                let expr = self.visit_expr(expr);
+
+                let output = match expr {
+                    Ok(ref val) => format!("{}", val),
+                    Err(ref e) => format!("{}", e),
+                };
 
                 // TODO eval should have writer
-                writeln!(self.buffer_out, "{}", expr);
+                writeln!(self.writer, "{}", output);
 
-                Ok(LoxValue::Nil)
+                expr
             }
-        }
+        };
     }
+}
+
+impl<R: std::io::BufRead, W: std::io::Write> ExprVisitor for Interpreter<R, W> {
+    type Value = EvalResult;
 
     fn visit_expr(&mut self, expr: Expr) -> Self::Value {
         match expr {
@@ -230,18 +252,20 @@ mod tests {
 
     #[test]
     fn eval_trivial() {
-        let ast = Parser::new(Lexer::new("-123 * (45.67)")).parse().unwrap();
+        let ast = Parser::new(Lexer::new("print -123 * (45.67);"))
+            .parse()
+            .unwrap();
 
-        let expected = LoxValue::Float(-5617.41);
+        let mock_reader = b"test";
 
-        let mut output = Vec::new();
+        let mut writer = Vec::new();
 
-        let mut interpreter = Interpreter::new(&mut output);
+        let mut interpreter = Interpreter::new(&mock_reader[..], writer);
 
-        let result = interpreter.eval(ast);
+        interpreter.eval(ast);
 
-        assert!(result.is_ok());
+        let result = String::from_utf8(interpreter.get_writer().clone()).unwrap();
 
-        assert_eq!(result.unwrap(), expected);
+        assert_eq!(result, "-5617.41");
     }
 }
