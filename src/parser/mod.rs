@@ -1,7 +1,8 @@
 pub mod ast;
 
 use self::ast::{
-    expr::{BinaryOperator, Expr, Literal, Number, UnaryOperator},
+    decl::Decl,
+    expr::{BinaryOperator, Expr, Identifier, Literal, Number, UnaryOperator},
     program::Program,
     stmt::Stmt,
 };
@@ -44,17 +45,26 @@ impl<'p> Parser<'p> {
     }
 
     fn parse_program(&mut self) -> ParseResult<Program> {
-        let stmts = {
-            let mut stmts = Vec::new();
+        let declarations = {
+            let mut declarations = Vec::new();
 
+            // TODO error handling
             while self.lexer.peek().is_some() {
-                stmts.push(self.parse_stmt()?)
+                declarations.push(self.parse_decl()?)
             }
 
-            stmts
+            declarations
         };
 
-        Ok(Program { stmts })
+        Ok(Program { declarations })
+    }
+
+    fn parse_decl(&mut self) -> ParseResult<Decl> {
+        match self.lexer.peek() {
+            Some(t) if t.kind == TokenType::Var => self.parse_decl_stmt(),
+            Some(_) => Ok(Decl::Stmt(self.parse_stmt()?)),
+            None => todo!(),
+        }
     }
 
     fn parse_stmt(&mut self) -> ParseResult<Stmt> {
@@ -81,6 +91,33 @@ impl<'p> Parser<'p> {
         self.consume_single_token(TokenType::Semicolon)?;
 
         Ok(Stmt::Expr(expr))
+    }
+
+    fn parse_decl_stmt(&mut self) -> ParseResult<Decl> {
+        let _ = self.lexer.next(); // discard "var"
+
+        let id = match self.lexer.next() {
+            Some(t) if t.kind == TokenType::Identifier => t.literal,
+            Some(_) => todo!("unexpected token"),
+            None => todo!("unexpected end of input"),
+        };
+
+        let identifier = Identifier { name: id };
+
+        match self.lexer.next() {
+            Some(t) if t.kind == TokenType::Equal => {
+                let expr = self.parse_expr()?;
+
+                self.consume_single_token(TokenType::Semicolon)?;
+
+                Ok(Decl::Var(identifier, Some(expr)))
+            }
+            Some(t) if t.kind == TokenType::Semicolon => Ok(Decl::Var(identifier, None)),
+            Some(_) => {
+                todo!("Unexpected token")
+            }
+            None => todo!(),
+        }
     }
 
     fn parse_expr(&mut self) -> ParseResult<Expr> {
@@ -225,6 +262,10 @@ impl<'p> Parser<'p> {
                     self.consume_single_token(TokenType::RightParen)?;
 
                     Ok(Expr::Grouping(Box::new(expr)))
+                }
+                TokenType::Identifier => {
+                    let id = Identifier { name: t.literal };
+                    Ok(Expr::Var(id))
                 }
                 _ => unreachable!(),
             },

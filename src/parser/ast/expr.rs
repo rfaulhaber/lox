@@ -4,6 +4,12 @@ pub enum Expr {
     Unary(UnaryOperator, Box<Expr>),
     Binary(Box<Expr>, BinaryOperator, Box<Expr>),
     Grouping(Box<Expr>),
+    Var(Identifier),
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct Identifier {
+    pub name: String,
 }
 
 #[derive(Debug, Clone, PartialEq)]

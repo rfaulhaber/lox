@@ -1,6 +1,6 @@
-use super::stmt::Stmt;
+use super::decl::Decl;
 
 #[derive(Debug, PartialEq)]
 pub struct Program {
-    pub stmts: Vec<Stmt>,
+    pub declarations: Vec<Decl>,
 }

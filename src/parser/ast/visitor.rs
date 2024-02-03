@@ -1,4 +1,5 @@
 use super::{
+    decl::Decl,
     expr::{BinaryOperator, Expr, Literal, UnaryOperator},
     program::Program,
     stmt::Stmt,
@@ -20,6 +21,8 @@ pub trait ExprVisitor: Sized {
 
 pub trait StmtVisitor: Sized + ExprVisitor {
     fn visit_program(&mut self, program: Program);
+
+    fn visit_declaration(&mut self, decl: Decl);
 
     fn visit_stmt(&mut self, stmt: Stmt);
 }
