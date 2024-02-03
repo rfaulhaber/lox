@@ -38,6 +38,12 @@ impl<W: std::io::Write> StmtVisitor for AstPrinter<W> {
             Stmt::Expr(expr) => self.visit_expr(expr),
             Stmt::Print(expr) => self.visit_expr(expr),
         };
+
+        let res = write!(self.writer, "{}", stmt);
+
+        if res.is_err() {
+            panic!("could not parse: {:?}", res);
+        }
     }
 }
 
@@ -120,7 +126,7 @@ mod tests {
 
     #[test]
     fn prints_simple_ast() {
-        let ast = Parser::new(Lexer::new("-123 * (45.67)")).parse().unwrap();
+        let ast = Parser::new(Lexer::new("-123 * (45.67);")).parse().unwrap();
 
         let expected = String::from("(* (- 123) (group 45.67))");
 
@@ -130,6 +136,6 @@ mod tests {
 
         let result = String::from_utf8(printer.get_writer().clone()).unwrap();
 
-        assert_eq!(result, expected);
+        assert_eq!(result.trim(), expected);
     }
 }

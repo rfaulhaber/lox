@@ -266,6 +266,6 @@ mod tests {
 
         let result = String::from_utf8(interpreter.get_writer().clone()).unwrap();
 
-        assert_eq!(result, "-5617.41");
+        assert_eq!(result.trim(), "-5617.41");
     }
 }

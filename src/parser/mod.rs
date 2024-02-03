@@ -263,7 +263,7 @@ mod tests {
 
     #[test]
     fn parse_primary_expr() {
-        let mut result = Parser::new(Lexer::new("-1 * (2 + 3)")).parse();
+        let mut result = Parser::new(Lexer::new("-1 * (2 + 3);")).parse();
 
         let literal_1 = Expr::Literal(Literal::Number(Number::Int(1)));
         let literal_2 = Expr::Literal(Literal::Number(Number::Int(2)));
