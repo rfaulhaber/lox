@@ -1,36 +1,36 @@
-use std::io::{BufWriter, Write};
+use std::fmt::Write;
 
 use super::{
+    decl::Decl,
     expr::{BinaryOperator, Expr, Literal, Number, UnaryOperator},
     program::Program,
     stmt::Stmt,
     visitor::{ExprVisitor, StmtVisitor},
 };
 
-pub struct AstPrinter<W: std::io::Write> {
-    writer: W,
+pub struct AstPrinter {
+    writer: String,
 }
 
-impl<W: std::io::Write> AstPrinter<W> {
-    pub fn new(writer: W) -> AstPrinter<W> {
-        Self { writer }
+impl AstPrinter {
+    pub fn new() -> AstPrinter {
+        Self {
+            writer: String::new(),
+        }
     }
 
-    pub fn get_writer(&mut self) -> &W {
-        &self.writer
-    }
-
-    pub fn print(&mut self, ast: Program) {
+    pub fn print(&mut self, ast: Program) -> String {
         self.visit_program(ast);
+        self.writer.to_owned()
     }
 }
 
-impl<W: std::io::Write> StmtVisitor for AstPrinter<W> {
+impl StmtVisitor for AstPrinter {
     fn visit_program(&mut self, program: Program) {
         program
-            .stmts
+            .declarations
             .into_iter()
-            .for_each(|stmt| self.visit_stmt(stmt))
+            .for_each(|decl| self.visit_declaration(decl))
     }
 
     fn visit_stmt(&mut self, stmt: Stmt) {
@@ -45,9 +45,22 @@ impl<W: std::io::Write> StmtVisitor for AstPrinter<W> {
             panic!("could not parse: {:?}", res);
         }
     }
+
+    fn visit_declaration(&mut self, decl: Decl) {
+        match decl {
+            Decl::Var(identifier, expr) => match expr {
+                Some(expr) => {
+                    let expr = self.visit_expr(expr);
+                    write!(self.writer, "(var {} {})", identifier.name, expr).unwrap()
+                }
+                None => write!(self.writer, "(var {})", identifier.name).unwrap(),
+            },
+            Decl::Stmt(stmt) => self.visit_stmt(stmt),
+        }
+    }
 }
 
-impl<W: std::io::Write> ExprVisitor for AstPrinter<W> {
+impl ExprVisitor for AstPrinter {
     type Value = String;
 
     fn visit_expr(&mut self, expr: Expr) -> Self::Value {
@@ -56,6 +69,7 @@ impl<W: std::io::Write> ExprVisitor for AstPrinter<W> {
             Expr::Unary(op, rhs) => self.visit_unary_expr(op, *rhs),
             Expr::Binary(lhs, op, rhs) => self.visit_binary_expr(*lhs, op, *rhs),
             Expr::Grouping(expr) => self.visit_grouping_expr(*expr),
+            Expr::Var(var) => var.name,
         }
     }
 
@@ -130,12 +144,8 @@ mod tests {
 
         let expected = String::from("(* (- 123) (group 45.67))");
 
-        let mut printer = AstPrinter::new(Vec::new());
+        let result = AstPrinter::new().print(ast);
 
-        printer.print(ast);
-
-        let result = String::from_utf8(printer.get_writer().clone()).unwrap();
-
-        assert_eq!(result.trim(), expected);
+        assert_eq!(result, expected);
     }
 }

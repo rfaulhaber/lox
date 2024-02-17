@@ -3,11 +3,11 @@ use thiserror::Error;
 use std::{
     cmp::Ordering,
     fmt::Display,
-    io::{BufWriter, Write},
     ops::{Add, Div, Mul, Sub},
 };
 
 use crate::parser::ast::{
+    decl::Decl,
     expr::{BinaryOperator, Expr, Literal, Number, UnaryOperator},
     program::Program,
     stmt::Stmt,
@@ -142,8 +142,8 @@ struct EvalVisitor {}
 
 impl<R: std::io::BufRead, W: std::io::Write> StmtVisitor for Interpreter<R, W> {
     fn visit_program(&mut self, program: Program) {
-        for stmt in program.stmts {
-            self.visit_stmt(stmt);
+        for decl in program.declarations {
+            self.visit_declaration(decl)
         }
     }
 
@@ -158,12 +158,21 @@ impl<R: std::io::BufRead, W: std::io::Write> StmtVisitor for Interpreter<R, W> {
                     Err(ref e) => format!("{}", e),
                 };
 
-                // TODO eval should have writer
                 writeln!(self.writer, "{}", output);
 
                 expr
             }
         };
+    }
+
+    fn visit_declaration(&mut self, decl: Decl) {
+        match decl {
+            Decl::Var(id, expr) => match expr {
+                Some(expr) => todo!(),
+                None => todo!(),
+            },
+            Decl::Stmt(stmt) => self.visit_stmt(stmt),
+        }
     }
 }
 
@@ -176,6 +185,7 @@ impl<R: std::io::BufRead, W: std::io::Write> ExprVisitor for Interpreter<R, W> {
             Expr::Unary(op, rhs) => self.visit_unary_expr(op, *rhs),
             Expr::Binary(lhs, op, rhs) => self.visit_binary_expr(*lhs, op, *rhs),
             Expr::Grouping(expr) => self.visit_grouping_expr(*expr),
+            Expr::Var(var) => todo!(),
         }
     }
 

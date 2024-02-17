@@ -311,7 +311,7 @@ mod tests {
         let literal_3 = Expr::Literal(Literal::Number(Number::Int(3)));
 
         let expected = Program {
-            stmts: vec![Stmt::Expr(Expr::Binary(
+            declarations: vec![Decl::Stmt(Stmt::Expr(Expr::Binary(
                 Box::new(Expr::Unary(UnaryOperator::Neg, Box::new(literal_1))),
                 BinaryOperator::Mul,
                 Box::new(Expr::Grouping(Box::new(Expr::Binary(
@@ -319,7 +319,7 @@ mod tests {
                     BinaryOperator::Add,
                     Box::new(literal_3),
                 )))),
-            ))],
+            )))],
         };
 
         assert_eq!(result.unwrap(), expected);
