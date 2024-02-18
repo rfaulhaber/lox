@@ -26,6 +26,8 @@ pub enum ParseError {
     UnexpectedToken(TokenType, TokenType),
     #[error("Unexpected end of input")]
     UnexpectedEndOfInput,
+    #[error("Invalid assignment target")]
+    InvalidAssignmnetTarget,
 }
 
 #[derive(Debug)]
@@ -37,6 +39,12 @@ impl<'p> Parser<'p> {
     pub fn new(lexer: Lexer<'p>) -> Self {
         Self {
             lexer: lexer.peekable(),
+        }
+    }
+
+    pub fn from_source(source: &'p str) -> Self {
+        Self {
+            lexer: Lexer::new(source).peekable(),
         }
     }
 
@@ -121,7 +129,27 @@ impl<'p> Parser<'p> {
     }
 
     fn parse_expr(&mut self) -> ParseResult<Expr> {
-        self.parse_equality()
+        self.parse_assignment()
+    }
+
+    fn parse_assignment(&mut self) -> ParseResult<Expr> {
+        let expr = self.parse_equality()?;
+
+        if self
+            .lexer
+            .peek()
+            .is_some_and(|t| t.kind == TokenType::Equal)
+        {
+            let _ = self.lexer.next();
+            let value = self.parse_assignment()?;
+
+            match expr {
+                Expr::Var(id) => return Ok(Expr::Assignment(id, Box::new(value))),
+                _ => return Err(ParseError::InvalidAssignmnetTarget),
+            }
+        }
+
+        Ok(expr)
     }
 
     fn parse_equality(&mut self) -> ParseResult<Expr> {
@@ -304,7 +332,7 @@ mod tests {
 
     #[test]
     fn parse_primary_expr() {
-        let mut result = Parser::new(Lexer::new("-1 * (2 + 3);")).parse();
+        let result = Parser::new(Lexer::new("-1 * (2 + 3);")).parse();
 
         let literal_1 = Expr::Literal(Literal::Number(Number::Int(1)));
         let literal_2 = Expr::Literal(Literal::Number(Number::Int(2)));
@@ -320,6 +348,27 @@ mod tests {
                     Box::new(literal_3),
                 )))),
             )))],
+        };
+
+        assert_eq!(result.unwrap(), expected);
+    }
+
+    #[test]
+    fn parse_assignment() {
+        let input = b"var a = 1;\nprint a = 2;";
+        let result = Parser::new(Lexer::new(std::str::from_utf8(input).unwrap())).parse();
+
+        let expected = Program {
+            declarations: vec![
+                Decl::Var(
+                    Identifier { name: "a".into() },
+                    Some(Expr::Literal(Literal::Number(Number::Int(1)))),
+                ),
+                Decl::Stmt(Stmt::Print(Expr::Assignment(
+                    Identifier { name: "a".into() },
+                    Box::new(Expr::Literal(Literal::Number(Number::Int(2)))),
+                ))),
+            ],
         };
 
         assert_eq!(result.unwrap(), expected);

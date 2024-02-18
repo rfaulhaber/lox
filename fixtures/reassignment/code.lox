@@ -1,0 +1,4 @@
+var language = "rust";
+print language;
+language = "lox";
+print language;

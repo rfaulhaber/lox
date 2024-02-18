@@ -1,6 +1,6 @@
 use super::{
     decl::Decl,
-    expr::{BinaryOperator, Expr, Literal, UnaryOperator},
+    expr::{BinaryOperator, Expr, Identifier, Literal, UnaryOperator},
     program::Program,
     stmt::Stmt,
 };
@@ -17,6 +17,8 @@ pub trait ExprVisitor: Sized {
     fn visit_literal(&mut self, literal: Literal) -> Self::Value;
 
     fn visit_grouping_expr(&mut self, expr: Expr) -> Self::Value;
+
+    fn visit_assignment_expr(&mut self, id: Identifier, expr: Expr) -> Self::Value;
 }
 
 pub trait StmtVisitor: Sized + ExprVisitor {

@@ -9,7 +9,7 @@ use std::{
 
 use crate::parser::ast::{
     decl::Decl,
-    expr::{BinaryOperator, Expr, Literal, Number, UnaryOperator},
+    expr::{BinaryOperator, Expr, Identifier, Literal, Number, UnaryOperator},
     program::Program,
     stmt::Stmt,
     visitor::{ExprVisitor, StmtVisitor},
@@ -221,6 +221,7 @@ impl<R: std::io::BufRead, W: std::io::Write> ExprVisitor for Interpreter<R, W> {
                 .env
                 .get(var.name.clone())
                 .ok_or_else(|| EvalError::UndefinedVariable(var.name)),
+            Expr::Assignment(id, expr) => self.visit_assignment_expr(id, *expr),
         }
     }
 
@@ -271,6 +272,13 @@ impl<R: std::io::BufRead, W: std::io::Write> ExprVisitor for Interpreter<R, W> {
 
     fn visit_grouping_expr(&mut self, expr: Expr) -> Self::Value {
         self.visit_expr(expr)
+    }
+
+    fn visit_assignment_expr(&mut self, id: Identifier, expr: Expr) -> Self::Value {
+        let value = self.visit_expr(expr)?;
+        self.env.define(id.name, value.clone());
+
+        Ok(value)
     }
 }
 

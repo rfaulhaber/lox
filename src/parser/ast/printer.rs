@@ -2,7 +2,7 @@ use std::fmt::Write;
 
 use super::{
     decl::Decl,
-    expr::{BinaryOperator, Expr, Literal, Number, UnaryOperator},
+    expr::{BinaryOperator, Expr, Identifier, Literal, Number, UnaryOperator},
     program::Program,
     stmt::Stmt,
     visitor::{ExprVisitor, StmtVisitor},
@@ -70,6 +70,7 @@ impl ExprVisitor for AstPrinter {
             Expr::Binary(lhs, op, rhs) => self.visit_binary_expr(*lhs, op, *rhs),
             Expr::Grouping(expr) => self.visit_grouping_expr(*expr),
             Expr::Var(var) => var.name,
+            Expr::Assignment(id, expr) => self.visit_assignment_expr(id, *expr),
         }
     }
 
@@ -129,6 +130,12 @@ impl ExprVisitor for AstPrinter {
         let expr = self.visit_expr(expr);
 
         format!("(group {})", expr)
+    }
+
+    fn visit_assignment_expr(&mut self, id: Identifier, expr: Expr) -> Self::Value {
+        let expr = self.visit_expr(expr);
+
+        format!("(assign {} {})", id.name, expr)
     }
 }
 
