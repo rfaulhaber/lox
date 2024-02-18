@@ -27,4 +27,6 @@ pub trait StmtVisitor: Sized + ExprVisitor {
     fn visit_declaration(&mut self, decl: Decl);
 
     fn visit_stmt(&mut self, stmt: Stmt);
+
+    fn visit_block(&mut self, block: Vec<Decl>);
 }

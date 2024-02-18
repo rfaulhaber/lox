@@ -27,3 +27,4 @@ macro_rules! make_test {
 make_test!(assignments);
 make_test!(basic_statements);
 make_test!(reassignment);
+make_test!(scope);

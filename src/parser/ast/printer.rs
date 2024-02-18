@@ -37,6 +37,10 @@ impl StmtVisitor for AstPrinter {
         let stmt = match stmt {
             Stmt::Expr(expr) => self.visit_expr(expr),
             Stmt::Print(expr) => self.visit_expr(expr),
+            Stmt::Block(stmts) => {
+                self.visit_block(stmts);
+                "".into() // stupid
+            }
         };
 
         let res = write!(self.writer, "{}", stmt);
@@ -57,6 +61,10 @@ impl StmtVisitor for AstPrinter {
             },
             Decl::Stmt(stmt) => self.visit_stmt(stmt),
         }
+    }
+
+    fn visit_block(&mut self, block: Vec<Decl>) {
+        block.into_iter().for_each(|b| self.visit_declaration(b))
     }
 }
 

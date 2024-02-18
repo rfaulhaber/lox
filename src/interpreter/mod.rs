@@ -99,20 +99,22 @@ impl LoxValue {
 pub enum EvalError {
     #[error("Incompatible types for operation {0}: {1}, {2}")]
     TypeMismatch(String, LoxValue, LoxValue),
-    #[error("Undefined variable: {0}")]
+    #[error("Reference to undefined variable: {0}")]
     UndefinedVariable(String),
     #[error("Type error: {0}")]
     TypeError(String),
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 struct Env {
+    outer: Option<Box<Env>>,
     values: HashMap<String, LoxValue>,
 }
 
 impl Env {
     pub fn new() -> Self {
         Self {
+            outer: None,
             values: HashMap::new(),
         }
     }
@@ -121,8 +123,32 @@ impl Env {
         self.values.insert(name, value);
     }
 
+    pub fn assign(&mut self, name: String, value: LoxValue) -> Result<(), EvalError> {
+        if self.values.contains_key(&name) {
+            self.values.insert(name.clone(), value.clone());
+        }
+
+        match self.outer {
+            Some(_) => self.outer.as_mut().unwrap().assign(name, value),
+            None => Err(EvalError::UndefinedVariable(name)),
+        }
+    }
+
     pub fn get(&mut self, name: String) -> Option<LoxValue> {
-        self.values.get(&name).cloned()
+        self.values
+            .get(&name)
+            .cloned()
+            .or_else(|| match &self.outer {
+                Some(_) => self.outer.as_mut().unwrap().get(name),
+                None => None,
+            })
+    }
+
+    pub fn from_outer(outer: Env) -> Env {
+        Env {
+            outer: Some(Box::new(outer)),
+            values: HashMap::new(),
+        }
     }
 }
 
@@ -154,7 +180,9 @@ impl<R: std::io::BufRead, W: std::io::Write> Interpreter<R, W> {
     }
 
     pub fn eval(&mut self, program: Program) {
-        self.visit_program(program)
+        self.state = InterpreterState::Evaluating;
+        self.visit_program(program);
+        self.state = InterpreterState::Done;
     }
 
     // TODO do better
@@ -162,8 +190,6 @@ impl<R: std::io::BufRead, W: std::io::Write> Interpreter<R, W> {
         &self.writer
     }
 }
-
-struct EvalVisitor {}
 
 impl<R: std::io::BufRead, W: std::io::Write> StmtVisitor for Interpreter<R, W> {
     fn visit_program(&mut self, program: Program) {
@@ -173,8 +199,12 @@ impl<R: std::io::BufRead, W: std::io::Write> StmtVisitor for Interpreter<R, W> {
     }
 
     fn visit_stmt(&mut self, stmt: Stmt) {
-        let _ = match stmt {
-            Stmt::Expr(expr) => self.visit_expr(expr),
+        match stmt {
+            Stmt::Expr(expr) => {
+                // TODO do better?
+                self.visit_expr(expr);
+                ()
+            }
             Stmt::Print(expr) => {
                 let expr = self.visit_expr(expr);
 
@@ -184,8 +214,9 @@ impl<R: std::io::BufRead, W: std::io::Write> StmtVisitor for Interpreter<R, W> {
                 };
 
                 writeln!(self.writer, "{}", output).unwrap();
-
-                expr
+            }
+            Stmt::Block(block) => {
+                self.visit_block(block);
             }
         };
     }
@@ -205,6 +236,20 @@ impl<R: std::io::BufRead, W: std::io::Write> StmtVisitor for Interpreter<R, W> {
             },
             Decl::Stmt(stmt) => self.visit_stmt(stmt),
         }
+    }
+
+    fn visit_block(&mut self, block: Vec<Decl>) {
+        // TODO avoid cloning
+        let previous = self.env.clone();
+        let block_env = Env::from_outer(self.env.clone());
+
+        self.env = block_env;
+
+        block
+            .into_iter()
+            .for_each(|stmt| self.visit_declaration(stmt));
+
+        self.env = previous;
     }
 }
 
@@ -276,7 +321,7 @@ impl<R: std::io::BufRead, W: std::io::Write> ExprVisitor for Interpreter<R, W> {
 
     fn visit_assignment_expr(&mut self, id: Identifier, expr: Expr) -> Self::Value {
         let value = self.visit_expr(expr)?;
-        self.env.define(id.name, value.clone());
+        self.env.assign(id.name, value.clone())?;
 
         Ok(value)
     }

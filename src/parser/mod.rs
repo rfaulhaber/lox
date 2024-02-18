@@ -28,6 +28,8 @@ pub enum ParseError {
     UnexpectedEndOfInput,
     #[error("Invalid assignment target")]
     InvalidAssignmnetTarget,
+    #[error("Missing '}}' in block")]
+    MissingBlockClose,
 }
 
 #[derive(Debug)]
@@ -78,6 +80,7 @@ impl<'p> Parser<'p> {
     fn parse_stmt(&mut self) -> ParseResult<Stmt> {
         match self.lexer.peek() {
             Some(t) if t.kind == TokenType::Print => self.parse_print_stmt(),
+            Some(t) if t.kind == TokenType::LeftBrace => self.parse_block(),
             Some(_) => self.parse_expr_stmt(),
             None => todo!(),
         }
@@ -91,6 +94,30 @@ impl<'p> Parser<'p> {
         self.consume_single_token(TokenType::Semicolon)?;
 
         Ok(Stmt::Print(expr))
+    }
+
+    fn parse_block(&mut self) -> ParseResult<Stmt> {
+        let _ = self.lexer.next(); // consume '{'
+
+        let mut stmts = Vec::new();
+
+        let mut right_brace_found = false;
+
+        while let Some(token) = self.lexer.peek() {
+            if token.kind == TokenType::RightBrace {
+                right_brace_found = true;
+                let _ = self.lexer.next();
+                break;
+            }
+
+            stmts.push(self.parse_decl()?);
+        }
+
+        if self.lexer.peek().is_none() && !right_brace_found {
+            return Err(ParseError::MissingBlockClose);
+        }
+
+        Ok(Stmt::Block(stmts))
     }
 
     fn parse_expr_stmt(&mut self) -> ParseResult<Stmt> {
@@ -295,7 +322,10 @@ impl<'p> Parser<'p> {
                     let id = Identifier { name: t.literal };
                     Ok(Expr::Var(id))
                 }
-                _ => unreachable!(),
+                _ => unreachable!(
+                    "encountered unexpected token: {:?}, lex: {:?}",
+                    t.kind, t.location
+                ),
             },
             None => todo!("throw error"),
         }
@@ -368,6 +398,68 @@ mod tests {
                     Identifier { name: "a".into() },
                     Box::new(Expr::Literal(Literal::Number(Number::Int(2)))),
                 ))),
+            ],
+        };
+
+        assert_eq!(result.unwrap(), expected);
+    }
+
+    #[test]
+    fn parse_empty_block() {
+        let input = "{}";
+
+        let result = Parser::new(Lexer::new(input)).parse();
+
+        let expected = Program {
+            declarations: vec![Decl::Stmt(Stmt::Block(vec![]))],
+        };
+
+        assert_eq!(result.unwrap(), expected);
+    }
+
+    #[test]
+    fn parse_nested_empty_block() {
+        let input = "{{}}";
+
+        let result = Parser::new(Lexer::new(input)).parse();
+
+        let expected = Program {
+            declarations: vec![Decl::Stmt(Stmt::Block(vec![Decl::Stmt(Stmt::Block(
+                vec![],
+            ))]))],
+        };
+
+        assert_eq!(result.unwrap(), expected);
+    }
+
+    #[test]
+    fn parse_blocks() {
+        let input = r#"var a = 1;
+{
+    var b = 2;
+    {
+        var c = 3;
+    }
+}"#;
+
+        let result = Parser::new(Lexer::new(input)).parse();
+
+        let expected = Program {
+            declarations: vec![
+                Decl::Var(
+                    Identifier { name: "a".into() },
+                    Some(Expr::Literal(Literal::Number(Number::Int(1)))),
+                ),
+                Decl::Stmt(Stmt::Block(vec![
+                    Decl::Var(
+                        Identifier { name: "b".into() },
+                        Some(Expr::Literal(Literal::Number(Number::Int(2)))),
+                    ),
+                    Decl::Stmt(Stmt::Block(vec![Decl::Var(
+                        Identifier { name: "c".into() },
+                        Some(Expr::Literal(Literal::Number(Number::Int(3)))),
+                    )])),
+                ])),
             ],
         };
 
