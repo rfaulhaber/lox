@@ -2,6 +2,7 @@ use thiserror::Error;
 
 use std::{
     cmp::Ordering,
+    collections::HashMap,
     fmt::Display,
     ops::{Add, Div, Mul, Sub},
 };
@@ -98,15 +99,40 @@ impl LoxValue {
 pub enum EvalError {
     #[error("Incompatible types for operation {0}: {1}, {2}")]
     TypeMismatch(String, LoxValue, LoxValue),
+    #[error("Undefined variable: {0}")]
+    UndefinedVariable(String),
+    #[error("Type error: {0}")]
+    TypeError(String),
 }
 
-// TODO implement builder pattern
+#[derive(Debug)]
+struct Env {
+    values: HashMap<String, LoxValue>,
+}
 
+impl Env {
+    pub fn new() -> Self {
+        Self {
+            values: HashMap::new(),
+        }
+    }
+
+    pub fn define(&mut self, name: String, value: LoxValue) {
+        self.values.insert(name, value);
+    }
+
+    pub fn get(&mut self, name: String) -> Option<LoxValue> {
+        self.values.get(&name).cloned()
+    }
+}
+
+// TODO implement builder pattern?
 #[derive(Debug)]
 pub struct Interpreter<R: std::io::BufRead, W: std::io::Write> {
     reader: R,
     writer: W,
     state: InterpreterState,
+    env: Env,
 }
 
 #[derive(Debug)]
@@ -114,18 +140,16 @@ enum InterpreterState {
     Ready,
     Evaluating,
     Done,
-    Error,
+    Error(EvalError),
 }
 
-impl<R: std::io::BufRead, W: std::io::Write> Interpreter<R, W>
-where
-    W: std::io::Write,
-{
+impl<R: std::io::BufRead, W: std::io::Write> Interpreter<R, W> {
     pub fn new(reader: R, writer: W) -> Self {
         Self {
             reader,
             writer,
             state: InterpreterState::Ready,
+            env: Env::new(),
         }
     }
 
@@ -133,6 +157,7 @@ where
         self.visit_program(program)
     }
 
+    // TODO do better
     pub fn get_writer(&mut self) -> &W {
         &self.writer
     }
@@ -148,7 +173,7 @@ impl<R: std::io::BufRead, W: std::io::Write> StmtVisitor for Interpreter<R, W> {
     }
 
     fn visit_stmt(&mut self, stmt: Stmt) {
-        match stmt {
+        let _ = match stmt {
             Stmt::Expr(expr) => self.visit_expr(expr),
             Stmt::Print(expr) => {
                 let expr = self.visit_expr(expr);
@@ -158,7 +183,7 @@ impl<R: std::io::BufRead, W: std::io::Write> StmtVisitor for Interpreter<R, W> {
                     Err(ref e) => format!("{}", e),
                 };
 
-                writeln!(self.writer, "{}", output);
+                writeln!(self.writer, "{}", output).unwrap();
 
                 expr
             }
@@ -168,8 +193,15 @@ impl<R: std::io::BufRead, W: std::io::Write> StmtVisitor for Interpreter<R, W> {
     fn visit_declaration(&mut self, decl: Decl) {
         match decl {
             Decl::Var(id, expr) => match expr {
-                Some(expr) => todo!(),
-                None => todo!(),
+                Some(expr) => match self.visit_expr(expr) {
+                    Ok(value) => {
+                        self.env.define(id.name, value);
+                    }
+                    Err(err) => {
+                        self.state = InterpreterState::Error(err);
+                    }
+                },
+                None => self.env.define(id.name, LoxValue::Nil),
             },
             Decl::Stmt(stmt) => self.visit_stmt(stmt),
         }
@@ -185,7 +217,10 @@ impl<R: std::io::BufRead, W: std::io::Write> ExprVisitor for Interpreter<R, W> {
             Expr::Unary(op, rhs) => self.visit_unary_expr(op, *rhs),
             Expr::Binary(lhs, op, rhs) => self.visit_binary_expr(*lhs, op, *rhs),
             Expr::Grouping(expr) => self.visit_grouping_expr(*expr),
-            Expr::Var(var) => todo!(),
+            Expr::Var(var) => self
+                .env
+                .get(var.name.clone())
+                .ok_or_else(|| EvalError::UndefinedVariable(var.name)),
         }
     }
 
@@ -196,7 +231,9 @@ impl<R: std::io::BufRead, W: std::io::Write> ExprVisitor for Interpreter<R, W> {
             UnaryOperator::Neg => match right {
                 LoxValue::Int(i) => Ok(LoxValue::Int(-i)),
                 LoxValue::Float(f) => Ok(LoxValue::Float(-f)),
-                _ => todo!(),
+                _ => Err(EvalError::TypeError(
+                    "Cannot apply - operator to non-number.".into(),
+                )),
             },
             UnaryOperator::Not => match is_truthy(right) {
                 LoxValue::Bool(b) => Ok(LoxValue::Bool(!b)),
@@ -268,14 +305,31 @@ mod tests {
 
         let mock_reader = b"test";
 
-        let mut writer = Vec::new();
-
-        let mut interpreter = Interpreter::new(&mock_reader[..], writer);
+        let mut interpreter = Interpreter::new(&mock_reader[..], Vec::new());
 
         interpreter.eval(ast);
 
         let result = String::from_utf8(interpreter.get_writer().clone()).unwrap();
 
         assert_eq!(result.trim(), "-5617.41");
+    }
+
+    #[test]
+    fn eval_variable() {
+        let ast = Parser::new(Lexer::new(
+            std::str::from_utf8(b"var test = \"hello world\";\nprint test;").unwrap(),
+        ))
+        .parse()
+        .unwrap();
+
+        let mock_reader = b"";
+
+        let mut interpreter = Interpreter::new(&mock_reader[..], Vec::new());
+
+        interpreter.eval(ast);
+
+        let result = String::from_utf8(interpreter.get_writer().clone()).unwrap();
+
+        assert_eq!(result.trim(), "\"hello world\"");
     }
 }

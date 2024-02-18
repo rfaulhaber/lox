@@ -110,7 +110,7 @@ mod tests {
 
     #[test]
     fn lexer_tokenizes_simple_code() {
-        let input = "var language = \"lox\";";
+        let input = r#"var language = "lox";"#;
 
         let expected = vec![
             Token {
@@ -156,6 +156,82 @@ mod tests {
         ];
 
         let result: Vec<Token> = Lexer::new(input).collect();
+
+        assert_eq!(result, expected);
+    }
+
+    #[test]
+    fn lexer_tokenizes_multiple_lines() {
+        let input = b"var language = \"lox\";\nprint language;";
+
+        let expected = vec![
+            Token {
+                kind: TokenType::Var,
+                literal: "var".into(),
+                location: Span {
+                    offset: 0,
+                    length: 3,
+                },
+            },
+            Token {
+                kind: TokenType::Identifier,
+                literal: "language".into(),
+                location: Span {
+                    offset: 4,
+                    length: 8,
+                },
+            },
+            Token {
+                kind: TokenType::Equal,
+                literal: "=".into(),
+                location: Span {
+                    offset: 13,
+                    length: 1,
+                },
+            },
+            Token {
+                kind: TokenType::String,
+                literal: "\"lox\"".into(),
+                location: Span {
+                    offset: 15,
+                    length: 5,
+                },
+            },
+            Token {
+                kind: TokenType::Semicolon,
+                literal: ";".into(),
+                location: Span {
+                    offset: 20,
+                    length: 1,
+                },
+            },
+            Token {
+                kind: TokenType::Print,
+                literal: "print".into(),
+                location: Span {
+                    offset: 22,
+                    length: 5,
+                },
+            },
+            Token {
+                kind: TokenType::Identifier,
+                literal: "language".into(),
+                location: Span {
+                    offset: 28,
+                    length: 8,
+                },
+            },
+            Token {
+                kind: TokenType::Semicolon,
+                literal: ";".into(),
+                location: Span {
+                    offset: 36,
+                    length: 1,
+                },
+            },
+        ];
+
+        let result: Vec<Token> = Lexer::new(std::str::from_utf8(input).unwrap()).collect();
 
         assert_eq!(result, expected);
     }
