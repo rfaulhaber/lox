@@ -41,6 +41,10 @@ impl StmtVisitor for AstPrinter {
                 self.visit_block(stmts);
                 "".into() // stupid
             }
+            Stmt::If(cond, stmt, else_stmt) => {
+                self.visit_if_stmt(cond, *stmt, else_stmt.map(|f| *f));
+                "".into()
+            }
         };
 
         let res = write!(self.writer, "{}", stmt);
@@ -65,6 +69,22 @@ impl StmtVisitor for AstPrinter {
 
     fn visit_block(&mut self, block: Vec<Decl>) {
         block.into_iter().for_each(|b| self.visit_declaration(b))
+    }
+
+    fn visit_if_stmt(&mut self, cond: Expr, stmt: Stmt, else_stmt: Option<Stmt>) {
+        let expr = self.visit_expr(cond);
+
+        write!(self.writer, "(if {} ", expr);
+
+        self.visit_stmt(stmt);
+
+        write!(self.writer, " ");
+
+        if else_stmt.is_some() {
+            self.visit_stmt(else_stmt.unwrap());
+        }
+
+        write!(self.writer, ")");
     }
 }
 

@@ -1,0 +1,3 @@
+var myBool = true;
+
+if (myBool) print "truthy!";

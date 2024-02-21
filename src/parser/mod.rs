@@ -81,6 +81,7 @@ impl<'p> Parser<'p> {
         match self.lexer.peek() {
             Some(t) if t.kind == TokenType::Print => self.parse_print_stmt(),
             Some(t) if t.kind == TokenType::LeftBrace => self.parse_block(),
+            Some(t) if t.kind == TokenType::If => self.parse_if_stmt(),
             Some(_) => self.parse_expr_stmt(),
             None => todo!(),
         }
@@ -118,6 +119,28 @@ impl<'p> Parser<'p> {
         }
 
         Ok(Stmt::Block(stmts))
+    }
+
+    fn parse_if_stmt(&mut self) -> ParseResult<Stmt> {
+        let _ = self.lexer.next(); // consume 'if'
+
+        self.consume_single_token(TokenType::LeftParen)?;
+
+        let cond = self.parse_expr()?;
+
+        self.consume_single_token(TokenType::RightParen)?;
+
+        let stmt = self.parse_stmt()?;
+
+        match self.lexer.peek() {
+            Some(t) if t.kind == TokenType::Else => {
+                let _ = self.lexer.next(); // consume "else"
+                let else_stmt = self.parse_stmt()?;
+
+                Ok(Stmt::If(cond, Box::new(stmt), Some(Box::new(else_stmt))))
+            }
+            _ => Ok(Stmt::If(cond, Box::new(stmt), None)),
+        }
     }
 
     fn parse_expr_stmt(&mut self) -> ParseResult<Stmt> {
@@ -461,6 +484,56 @@ mod tests {
                     )])),
                 ])),
             ],
+        };
+
+        assert_eq!(result.unwrap(), expected);
+    }
+
+    #[test]
+    fn parse_if() {
+        let input = "if (first) if (second) whenTrue;";
+
+        let result = Parser::new(Lexer::new(input)).parse();
+
+        let expected = Program {
+            declarations: vec![Decl::Stmt(Stmt::If(
+                Expr::Var(Identifier {
+                    name: "first".into(),
+                }),
+                Box::new(Stmt::If(
+                    Expr::Var(Identifier {
+                        name: "second".into(),
+                    }),
+                    Box::new(Stmt::Expr(Expr::Var(Identifier {
+                        name: "whenTrue".into(),
+                    }))),
+                    None,
+                )),
+                None,
+            ))],
+        };
+
+        assert_eq!(result.unwrap(), expected);
+    }
+
+    #[test]
+    fn parse_if_else() {
+        let input = "if (first) whenTrue; else whenFalse;";
+
+        let result = Parser::new(Lexer::new(input)).parse();
+
+        let expected = Program {
+            declarations: vec![Decl::Stmt(Stmt::If(
+                Expr::Var(Identifier {
+                    name: "first".into(),
+                }),
+                Box::new(Stmt::Expr(Expr::Var(Identifier {
+                    name: "whenTrue".into(),
+                }))),
+                Some(Box::new(Stmt::Expr(Expr::Var(Identifier {
+                    name: "whenFalse".into(),
+                })))),
+            ))],
         };
 
         assert_eq!(result.unwrap(), expected);

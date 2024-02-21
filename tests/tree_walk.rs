@@ -28,3 +28,5 @@ make_test!(assignments);
 make_test!(basic_statements);
 make_test!(reassignment);
 make_test!(scope);
+make_test!(if_true);
+make_test!(if_false);

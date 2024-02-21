@@ -218,6 +218,9 @@ impl<R: std::io::BufRead, W: std::io::Write> StmtVisitor for Interpreter<R, W> {
             Stmt::Block(block) => {
                 self.visit_block(block);
             }
+            Stmt::If(cond, if_stmt, else_stmt) => {
+                self.visit_if_stmt(cond, *if_stmt, else_stmt.map(|stmt| *stmt))
+            }
         };
     }
 
@@ -250,6 +253,24 @@ impl<R: std::io::BufRead, W: std::io::Write> StmtVisitor for Interpreter<R, W> {
             .for_each(|stmt| self.visit_declaration(stmt));
 
         self.env = previous;
+    }
+
+    fn visit_if_stmt(&mut self, cond: Expr, stmt: Stmt, else_stmt: Option<Stmt>) {
+        let expr = self.visit_expr(cond);
+
+        match expr {
+            Ok(val) => match is_truthy(val) {
+                LoxValue::Bool(true) => self.visit_stmt(stmt),
+                LoxValue::Bool(false) => match else_stmt {
+                    Some(stmt) => self.visit_stmt(stmt),
+                    None => (),
+                },
+                _ => unreachable!(),
+            },
+            Err(e) => {
+                self.state = InterpreterState::Error(e);
+            }
+        }
     }
 }
 
