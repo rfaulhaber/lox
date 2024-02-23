@@ -2,7 +2,7 @@ use std::fmt::Write;
 
 use super::{
     decl::Decl,
-    expr::{BinaryOperator, Expr, Identifier, Literal, Number, UnaryOperator},
+    expr::{BinaryOperator, Expr, Identifier, Literal, LogicalOperator, Number, UnaryOperator},
     program::Program,
     stmt::Stmt,
     visitor::{ExprVisitor, StmtVisitor},
@@ -99,6 +99,7 @@ impl ExprVisitor for AstPrinter {
             Expr::Grouping(expr) => self.visit_grouping_expr(*expr),
             Expr::Var(var) => var.name,
             Expr::Assignment(id, expr) => self.visit_assignment_expr(id, *expr),
+            Expr::Logical(left, op, right) => self.visit_logical_expr(*left, op, *right),
         }
     }
 
@@ -164,6 +165,18 @@ impl ExprVisitor for AstPrinter {
         let expr = self.visit_expr(expr);
 
         format!("(assign {} {})", id.name, expr)
+    }
+
+    fn visit_logical_expr(&mut self, left: Expr, op: LogicalOperator, right: Expr) -> Self::Value {
+        let left = self.visit_expr(left);
+        let right = self.visit_expr(right);
+
+        let op = match op {
+            LogicalOperator::And => "and",
+            LogicalOperator::Or => "or",
+        };
+
+        format!("({} {} {})", op, left, right)
     }
 }
 

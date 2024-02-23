@@ -2,7 +2,7 @@ pub mod ast;
 
 use self::ast::{
     decl::Decl,
-    expr::{BinaryOperator, Expr, Identifier, Literal, Number, UnaryOperator},
+    expr::{BinaryOperator, Expr, Identifier, Literal, LogicalOperator, Number, UnaryOperator},
     program::Program,
     stmt::Stmt,
 };
@@ -183,7 +183,7 @@ impl<'p> Parser<'p> {
     }
 
     fn parse_assignment(&mut self) -> ParseResult<Expr> {
-        let expr = self.parse_equality()?;
+        let expr = self.parse_or()?;
 
         if self
             .lexer
@@ -197,6 +197,32 @@ impl<'p> Parser<'p> {
                 Expr::Var(id) => return Ok(Expr::Assignment(id, Box::new(value))),
                 _ => return Err(ParseError::InvalidAssignmnetTarget),
             }
+        }
+
+        Ok(expr)
+    }
+
+    fn parse_or(&mut self) -> ParseResult<Expr> {
+        let mut expr = self.parse_and()?;
+
+        while self.lexer.peek().is_some_and(|t| t.kind == TokenType::Or) {
+            self.lexer.next();
+            let right = self.parse_and()?;
+
+            expr = Expr::Logical(Box::new(expr), LogicalOperator::Or, Box::new(right));
+        }
+
+        Ok(expr)
+    }
+
+    fn parse_and(&mut self) -> ParseResult<Expr> {
+        let mut expr = self.parse_equality()?;
+
+        while self.lexer.peek().is_some_and(|t| t.kind == TokenType::And) {
+            self.lexer.next();
+            let right = self.parse_equality()?;
+
+            expr = Expr::Logical(Box::new(expr), LogicalOperator::And, Box::new(right));
         }
 
         Ok(expr)

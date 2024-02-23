@@ -9,7 +9,7 @@ use std::{
 
 use crate::parser::ast::{
     decl::Decl,
-    expr::{BinaryOperator, Expr, Identifier, Literal, Number, UnaryOperator},
+    expr::{BinaryOperator, Expr, Identifier, Literal, LogicalOperator, Number, UnaryOperator},
     program::Program,
     stmt::Stmt,
     visitor::{ExprVisitor, StmtVisitor},
@@ -288,6 +288,7 @@ impl<R: std::io::BufRead, W: std::io::Write> ExprVisitor for Interpreter<R, W> {
                 .get(var.name.clone())
                 .ok_or_else(|| EvalError::UndefinedVariable(var.name)),
             Expr::Assignment(id, expr) => self.visit_assignment_expr(id, *expr),
+            Expr::Logical(left, op, right) => self.visit_logical_expr(*left, op, *right),
         }
     }
 
@@ -345,6 +346,18 @@ impl<R: std::io::BufRead, W: std::io::Write> ExprVisitor for Interpreter<R, W> {
         self.env.assign(id.name, value.clone())?;
 
         Ok(value)
+    }
+
+    fn visit_logical_expr(&mut self, left: Expr, op: LogicalOperator, right: Expr) -> Self::Value {
+        let left_value = self.visit_expr(left)?;
+
+        match (is_truthy(left_value.clone()), op) {
+            (LoxValue::Bool(true), LogicalOperator::Or) => Ok(left_value),
+            (LoxValue::Bool(false), LogicalOperator::Or) => Ok(self.visit_expr(right)?),
+            (LoxValue::Bool(false), LogicalOperator::And) => Ok(left_value),
+            (LoxValue::Bool(true), LogicalOperator::And) => Ok(self.visit_expr(right)?),
+            _ => unreachable!(),
+        }
     }
 }
 

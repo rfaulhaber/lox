@@ -3,6 +3,7 @@ pub enum Expr {
     Literal(Literal),
     Unary(UnaryOperator, Box<Expr>),
     Binary(Box<Expr>, BinaryOperator, Box<Expr>),
+    Logical(Box<Expr>, LogicalOperator, Box<Expr>),
     Grouping(Box<Expr>),
     Var(Identifier),
     Assignment(Identifier, Box<Expr>),
@@ -51,4 +52,10 @@ pub enum BinaryOperator {
     Sub,
     Mul,
     Div,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum LogicalOperator {
+    And,
+    Or,
 }
