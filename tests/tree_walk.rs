@@ -31,3 +31,4 @@ make_test!(scope);
 make_test!(if_true);
 make_test!(if_false);
 make_test!(basic_logic);
+make_test!(basic_while);

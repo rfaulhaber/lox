@@ -79,10 +79,13 @@ impl<'p> Parser<'p> {
 
     fn parse_stmt(&mut self) -> ParseResult<Stmt> {
         match self.lexer.peek() {
-            Some(t) if t.kind == TokenType::Print => self.parse_print_stmt(),
-            Some(t) if t.kind == TokenType::LeftBrace => self.parse_block(),
-            Some(t) if t.kind == TokenType::If => self.parse_if_stmt(),
-            Some(_) => self.parse_expr_stmt(),
+            Some(t) => match t.kind {
+                TokenType::Print => self.parse_print_stmt(),
+                TokenType::LeftBrace => self.parse_block(),
+                TokenType::If => self.parse_if_stmt(),
+                TokenType::While => self.parse_while_stmt(),
+                _ => self.parse_expr_stmt(),
+            },
             None => todo!(),
         }
     }
@@ -141,6 +144,20 @@ impl<'p> Parser<'p> {
             }
             _ => Ok(Stmt::If(cond, Box::new(stmt), None)),
         }
+    }
+
+    fn parse_while_stmt(&mut self) -> ParseResult<Stmt> {
+        let _ = self.lexer.next(); // consume 'while'
+
+        self.consume_single_token(TokenType::LeftParen)?;
+
+        let cond = self.parse_expr()?;
+
+        self.consume_single_token(TokenType::RightParen)?;
+
+        let stmt = self.parse_stmt()?;
+
+        Ok(Stmt::While(cond, Box::new(stmt)))
     }
 
     fn parse_expr_stmt(&mut self) -> ParseResult<Stmt> {

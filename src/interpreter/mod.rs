@@ -63,10 +63,32 @@ impl Display for LoxValue {
 }
 
 impl LoxValue {
-    binary_number_arithmetic_impl!(try_add, add);
+    // binary_number_arithmetic_impl!(try_add, add);
     binary_number_arithmetic_impl!(try_sub, sub);
     binary_number_arithmetic_impl!(try_mul, mul);
     binary_number_arithmetic_impl!(try_div, div);
+
+    pub fn try_add(self, rhs: Self) -> EvalResult {
+        match (self.clone(), rhs.clone()) {
+            (LoxValue::Int(l), LoxValue::Int(r)) => Ok(LoxValue::Int(l.add(r))),
+            (LoxValue::Float(l), LoxValue::Float(r)) => Ok(LoxValue::Float(l.add(r))),
+            (LoxValue::Int(l), LoxValue::Float(r)) => Ok(LoxValue::Float((l as f64).add(r))),
+            (LoxValue::Float(l), LoxValue::Int(r)) => Ok(LoxValue::Float(l.add(r as f64))),
+            (LoxValue::String(s), right) => {
+                let right_str = format!("{}", right);
+
+                let mut new_str = String::from(s);
+                new_str.push_str(&right_str);
+
+                Ok(LoxValue::String(new_str))
+            }
+            _ => Err(EvalError::TypeMismatch(
+                "arithmetic".into(),
+                self.clone(),
+                rhs.clone(),
+            )),
+        }
+    }
 
     pub fn try_cmp(self, rhs: Self) -> Result<Ordering, EvalError> {
         match (self.clone(), rhs.clone()) {
@@ -126,11 +148,13 @@ impl Env {
     pub fn assign(&mut self, name: String, value: LoxValue) -> Result<(), EvalError> {
         if self.values.contains_key(&name) {
             self.values.insert(name.clone(), value.clone());
-        }
 
-        match self.outer {
-            Some(_) => self.outer.as_mut().unwrap().assign(name, value),
-            None => Err(EvalError::UndefinedVariable(name)),
+            Ok(())
+        } else {
+            match self.outer {
+                Some(_) => self.outer.as_mut().unwrap().assign(name, value),
+                None => Err(EvalError::UndefinedVariable(name)),
+            }
         }
     }
 
@@ -202,7 +226,7 @@ impl<R: std::io::BufRead, W: std::io::Write> StmtVisitor for Interpreter<R, W> {
         match stmt {
             Stmt::Expr(expr) => {
                 // TODO do better?
-                self.visit_expr(expr);
+                let _ = self.visit_expr(expr);
                 ()
             }
             Stmt::Print(expr) => {
@@ -221,6 +245,7 @@ impl<R: std::io::BufRead, W: std::io::Write> StmtVisitor for Interpreter<R, W> {
             Stmt::If(cond, if_stmt, else_stmt) => {
                 self.visit_if_stmt(cond, *if_stmt, else_stmt.map(|stmt| *stmt))
             }
+            Stmt::While(cond, body) => self.visit_while_stmt(cond, *body),
         };
     }
 
@@ -269,6 +294,25 @@ impl<R: std::io::BufRead, W: std::io::Write> StmtVisitor for Interpreter<R, W> {
             },
             Err(e) => {
                 self.state = InterpreterState::Error(e);
+            }
+        }
+    }
+
+    fn visit_while_stmt(&mut self, cond: Expr, body: Stmt) {
+        loop {
+            let expr = self.visit_expr(cond.clone());
+            match expr {
+                Ok(val) => {
+                    if is_truthy(val) == LoxValue::Bool(true) {
+                        self.visit_stmt(body.clone());
+                    } else {
+                        break;
+                    }
+                }
+                Err(e) => {
+                    self.state = InterpreterState::Error(e);
+                    break;
+                }
             }
         }
     }

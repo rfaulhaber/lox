@@ -3,7 +3,7 @@ use super::{
     stmt::Stmt,
 };
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum Decl {
     Var(Identifier, Option<Expr>),
     Stmt(Stmt),

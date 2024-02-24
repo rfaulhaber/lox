@@ -36,13 +36,17 @@ impl StmtVisitor for AstPrinter {
     fn visit_stmt(&mut self, stmt: Stmt) {
         let stmt = match stmt {
             Stmt::Expr(expr) => self.visit_expr(expr),
-            Stmt::Print(expr) => self.visit_expr(expr),
+            Stmt::Print(expr) => format!("(print {})", self.visit_expr(expr)).into(),
             Stmt::Block(stmts) => {
                 self.visit_block(stmts);
                 "".into() // stupid
             }
             Stmt::If(cond, stmt, else_stmt) => {
                 self.visit_if_stmt(cond, *stmt, else_stmt.map(|f| *f));
+                "".into()
+            }
+            Stmt::While(cond, body) => {
+                self.visit_while_stmt(cond, *body);
                 "".into()
             }
         };
@@ -85,6 +89,16 @@ impl StmtVisitor for AstPrinter {
         }
 
         write!(self.writer, ")");
+    }
+
+    fn visit_while_stmt(&mut self, cond: Expr, body: Stmt) {
+        let expr = self.visit_expr(cond);
+
+        write!(self.writer, "(while {}", expr);
+
+        self.visit_stmt(body);
+
+        write!(self.writer, " )");
     }
 }
 

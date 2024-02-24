@@ -33,4 +33,6 @@ pub trait StmtVisitor: Sized + ExprVisitor {
     fn visit_block(&mut self, block: Vec<Decl>);
 
     fn visit_if_stmt(&mut self, cond: Expr, stmt: Stmt, else_stmt: Option<Stmt>);
+
+    fn visit_while_stmt(&mut self, cond: Expr, body: Stmt);
 }
