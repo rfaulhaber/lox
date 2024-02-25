@@ -7,9 +7,12 @@ use self::ast::{
     stmt::Stmt,
 };
 
-use crate::lexer::{
-    lexer::Lexer,
-    token::{Token, TokenType},
+use crate::{
+    lexer::{
+        lexer::Lexer,
+        token::{Token, TokenType},
+    },
+    parser,
 };
 use std::iter::Peekable;
 use thiserror::Error;
@@ -84,6 +87,7 @@ impl<'p> Parser<'p> {
                 TokenType::LeftBrace => self.parse_block(),
                 TokenType::If => self.parse_if_stmt(),
                 TokenType::While => self.parse_while_stmt(),
+                TokenType::For => self.parse_for_stmt(),
                 _ => self.parse_expr_stmt(),
             },
             None => todo!(),
@@ -160,6 +164,63 @@ impl<'p> Parser<'p> {
         Ok(Stmt::While(cond, Box::new(stmt)))
     }
 
+    fn parse_for_stmt(&mut self) -> ParseResult<Stmt> {
+        enum Initializer {
+            Var(Decl),
+            Expr(Stmt),
+        }
+
+        let _ = self.lexer.next(); // consume "for"
+
+        self.consume_single_token(TokenType::LeftParen)?;
+
+        let initializer = match self.lexer.peek() {
+            Some(t) if t.kind == TokenType::Semicolon => None,
+            Some(t) if t.kind == TokenType::Var => Some(Initializer::Var(self.parse_decl_stmt()?)),
+            Some(_) => Some(Initializer::Expr(self.parse_expr_stmt()?)),
+            None => return Err(ParseError::UnexpectedEndOfInput),
+        };
+
+        self.lexer.next_if(|t| t.kind == TokenType::Semicolon);
+
+        let cond = match self.lexer.peek() {
+            Some(t) if t.kind == TokenType::Semicolon => None,
+            Some(_) => Some(self.parse_expr()?),
+            None => return Err(ParseError::UnexpectedEndOfInput),
+        };
+
+        self.consume_single_token(TokenType::Semicolon)?;
+
+        let inc = match self.lexer.peek() {
+            Some(t) if t.kind == TokenType::RightParen => None,
+            Some(_) => Some(self.parse_expr()?),
+            None => return Err(ParseError::UnexpectedEndOfInput),
+        };
+
+        self.consume_single_token(TokenType::RightParen)?;
+
+        let body = self.parse_stmt()?;
+
+        let body_with_modified_inc = inc.map_or(body.clone(), |inc_expr| {
+            Stmt::Block(vec![Decl::Stmt(body), Decl::Stmt(Stmt::Expr(inc_expr))])
+        });
+
+        let cond_or_true = cond.unwrap_or(Expr::Literal(Literal::Bool(true)));
+
+        let normalized_initialier = initializer.map(|init| match init {
+            Initializer::Var(var) => var,
+            Initializer::Expr(stmt) => Decl::Stmt(stmt),
+        });
+
+        match normalized_initialier {
+            Some(init) => Ok(Stmt::Block(vec![
+                init,
+                Decl::Stmt(Stmt::While(cond_or_true, Box::new(body_with_modified_inc))),
+            ])),
+            None => Ok(Stmt::While(cond_or_true, Box::new(body_with_modified_inc))),
+        }
+    }
+
     fn parse_expr_stmt(&mut self) -> ParseResult<Stmt> {
         let expr = self.parse_expr()?;
 
@@ -173,7 +234,7 @@ impl<'p> Parser<'p> {
 
         let id = match self.lexer.next() {
             Some(t) if t.kind == TokenType::Identifier => t.literal,
-            Some(_) => todo!("unexpected token"),
+            Some(t) => todo!("unexpected token: {:?}", t),
             None => todo!("unexpected end of input"),
         };
 

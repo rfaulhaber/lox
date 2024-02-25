@@ -32,3 +32,4 @@ make_test!(if_true);
 make_test!(if_false);
 make_test!(basic_logic);
 make_test!(basic_while);
+make_test!(for_loop);

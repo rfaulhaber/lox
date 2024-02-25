@@ -267,17 +267,13 @@ impl<R: std::io::BufRead, W: std::io::Write> StmtVisitor for Interpreter<R, W> {
     }
 
     fn visit_block(&mut self, block: Vec<Decl>) {
-        // TODO avoid cloning
-        let previous = self.env.clone();
-        let block_env = Env::from_outer(self.env.clone());
-
-        self.env = block_env;
+        self.env = Env::from_outer(self.env.clone());
 
         block
             .into_iter()
             .for_each(|stmt| self.visit_declaration(stmt));
 
-        self.env = previous;
+        self.env = *self.env.outer.clone().unwrap();
     }
 
     fn visit_if_stmt(&mut self, cond: Expr, stmt: Stmt, else_stmt: Option<Stmt>) {
