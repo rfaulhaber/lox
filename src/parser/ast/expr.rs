@@ -2,6 +2,7 @@
 pub enum Expr {
     Literal(Literal),
     Unary(UnaryOperator, Box<Expr>),
+    Call(Box<Expr>, Vec<Expr>),
     Binary(Box<Expr>, BinaryOperator, Box<Expr>),
     Logical(Box<Expr>, LogicalOperator, Box<Expr>),
     Grouping(Box<Expr>),

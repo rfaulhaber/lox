@@ -114,6 +114,7 @@ impl ExprVisitor for AstPrinter {
             Expr::Var(var) => var.name,
             Expr::Assignment(id, expr) => self.visit_assignment_expr(id, *expr),
             Expr::Logical(left, op, right) => self.visit_logical_expr(*left, op, *right),
+            Expr::Call(callee, arguments) => self.visit_call_expr(*callee, arguments),
         }
     }
 
@@ -191,6 +192,16 @@ impl ExprVisitor for AstPrinter {
         };
 
         format!("({} {} {})", op, left, right)
+    }
+
+    fn visit_call_expr(&mut self, callee: Expr, arguments: Vec<Expr>) -> Self::Value {
+        let expr = self.visit_expr(callee);
+        let arguments: Vec<String> = arguments
+            .into_iter()
+            .map(|expr| self.visit_expr(expr))
+            .collect();
+
+        format!("(call {} {:?})", expr, arguments)
     }
 }
 

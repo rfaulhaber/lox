@@ -3,7 +3,8 @@ use thiserror::Error;
 use std::{
     cmp::Ordering,
     collections::HashMap,
-    fmt::Display,
+    fmt::{Display, Write},
+    io::BufRead,
     ops::{Add, Div, Mul, Sub},
 };
 
@@ -12,7 +13,7 @@ use crate::parser::ast::{
     expr::{BinaryOperator, Expr, Identifier, Literal, LogicalOperator, Number, UnaryOperator},
     program::Program,
     stmt::Stmt,
-    visitor::{ExprVisitor, StmtVisitor},
+    visitor::Visitor,
 };
 
 // TODO implement proc macro
@@ -128,17 +129,30 @@ pub enum EvalError {
 }
 
 #[derive(Debug, Clone)]
+enum LoxFunction {
+    Builtin {
+        arity: usize,
+        func: fn(Vec<LoxValue>) -> EvalResult,
+    },
+}
+
+// #[derive(Debug, Clone)]
+// enum LoxEnvValue {
+//     Value(LoxValue),
+//     Callable(LoxCallable),
+// }
+
+#[derive(Debug, Clone)]
 struct Env {
     outer: Option<Box<Env>>,
     values: HashMap<String, LoxValue>,
 }
 
 impl Env {
-    pub fn new() -> Self {
-        Self {
-            outer: None,
-            values: HashMap::new(),
-        }
+    pub fn new_with_builtins() -> Self {
+        let mut env = Env::new();
+
+        todo!();
     }
 
     pub fn define(&mut self, name: String, value: LoxValue) {
@@ -174,13 +188,19 @@ impl Env {
             values: HashMap::new(),
         }
     }
+
+    fn new() -> Self {
+        Self {
+            outer: None,
+            values: HashMap::new(),
+        }
+    }
 }
 
 // TODO implement builder pattern?
-#[derive(Debug)]
-pub struct Interpreter<R: std::io::BufRead, W: std::io::Write> {
-    reader: R,
-    writer: W,
+pub struct Interpreter<'i> {
+    reader: Box<dyn BufRead + 'i>,
+    writer: Box<dyn Write + 'i>,
     state: InterpreterState,
     env: Env,
 }
@@ -193,13 +213,13 @@ enum InterpreterState {
     Error(EvalError),
 }
 
-impl<R: std::io::BufRead, W: std::io::Write> Interpreter<R, W> {
-    pub fn new(reader: R, writer: W) -> Self {
+impl<'i> Interpreter<'i> {
+    pub fn new(reader: Box<dyn BufRead>, writer: Box<dyn Write>) -> Self {
         Self {
             reader,
             writer,
             state: InterpreterState::Ready,
-            env: Env::new(),
+            env: Env::new_with_builtins(),
         }
     }
 
@@ -208,27 +228,23 @@ impl<R: std::io::BufRead, W: std::io::Write> Interpreter<R, W> {
         self.visit_program(program);
         self.state = InterpreterState::Done;
     }
-
-    // TODO do better
-    pub fn get_writer(&mut self) -> &W {
-        &self.writer
-    }
 }
 
-impl<R: std::io::BufRead, W: std::io::Write> StmtVisitor for Interpreter<R, W> {
-    fn visit_program(&mut self, program: Program) {
-        for decl in program.declarations {
-            self.visit_declaration(decl)
-        }
+impl<'i> Visitor for Interpreter<'i> {
+    type Value = EvalResult;
+
+    fn visit_program(&mut self, program: Program) -> Self::Value {
+        program
+            .declarations
+            .iter()
+            .map(|d| self.visit_declaration(*d))
+            .last()
+            .unwrap_or(Ok(LoxValue::Nil))
     }
 
-    fn visit_stmt(&mut self, stmt: Stmt) {
+    fn visit_stmt(&mut self, stmt: Stmt) -> Self::Value {
         match stmt {
-            Stmt::Expr(expr) => {
-                // TODO do better?
-                let _ = self.visit_expr(expr);
-                ()
-            }
+            Stmt::Expr(expr) => self.visit_expr(expr),
             Stmt::Print(expr) => {
                 let expr = self.visit_expr(expr);
 
@@ -238,45 +254,53 @@ impl<R: std::io::BufRead, W: std::io::Write> StmtVisitor for Interpreter<R, W> {
                 };
 
                 writeln!(self.writer, "{}", output).unwrap();
+
+                Ok(LoxValue::Nil)
             }
-            Stmt::Block(block) => {
-                self.visit_block(block);
-            }
+            Stmt::Block(block) => self.visit_block(block),
             Stmt::If(cond, if_stmt, else_stmt) => {
                 self.visit_if_stmt(cond, *if_stmt, else_stmt.map(|stmt| *stmt))
             }
             Stmt::While(cond, body) => self.visit_while_stmt(cond, *body),
-        };
+        }
     }
 
-    fn visit_declaration(&mut self, decl: Decl) {
+    fn visit_declaration(&mut self, decl: Decl) -> Self::Value {
         match decl {
             Decl::Var(id, expr) => match expr {
                 Some(expr) => match self.visit_expr(expr) {
                     Ok(value) => {
                         self.env.define(id.name, value);
+                        Ok(value)
                     }
                     Err(err) => {
-                        self.state = InterpreterState::Error(err);
+                        todo!("throw error")
                     }
                 },
-                None => self.env.define(id.name, LoxValue::Nil),
+                None => {
+                    self.env.define(id.name, LoxValue::Nil);
+                    Ok(LoxValue::Nil)
+                }
             },
             Decl::Stmt(stmt) => self.visit_stmt(stmt),
         }
     }
 
-    fn visit_block(&mut self, block: Vec<Decl>) {
+    fn visit_block(&mut self, block: Vec<Decl>) -> Self::Value {
         self.env = Env::from_outer(self.env.clone());
 
-        block
+        let result = block
             .into_iter()
-            .for_each(|stmt| self.visit_declaration(stmt));
+            .map(|stmt| self.visit_declaration(stmt))
+            .last()
+            .unwrap_or(Ok(LoxValue::Nil));
 
         self.env = *self.env.outer.clone().unwrap();
+
+        result
     }
 
-    fn visit_if_stmt(&mut self, cond: Expr, stmt: Stmt, else_stmt: Option<Stmt>) {
+    fn visit_if_stmt(&mut self, cond: Expr, stmt: Stmt, else_stmt: Option<Stmt>) -> Self::Value {
         let expr = self.visit_expr(cond);
 
         match expr {
@@ -284,17 +308,17 @@ impl<R: std::io::BufRead, W: std::io::Write> StmtVisitor for Interpreter<R, W> {
                 LoxValue::Bool(true) => self.visit_stmt(stmt),
                 LoxValue::Bool(false) => match else_stmt {
                     Some(stmt) => self.visit_stmt(stmt),
-                    None => (),
+                    None => todo!("return error"),
                 },
                 _ => unreachable!(),
             },
             Err(e) => {
-                self.state = InterpreterState::Error(e);
+                todo!("return error")
             }
         }
     }
 
-    fn visit_while_stmt(&mut self, cond: Expr, body: Stmt) {
+    fn visit_while_stmt(&mut self, cond: Expr, body: Stmt) -> Self::Value {
         loop {
             let expr = self.visit_expr(cond.clone());
             match expr {
@@ -306,16 +330,13 @@ impl<R: std::io::BufRead, W: std::io::Write> StmtVisitor for Interpreter<R, W> {
                     }
                 }
                 Err(e) => {
-                    self.state = InterpreterState::Error(e);
-                    break;
+                    return Err(e);
                 }
             }
         }
-    }
-}
 
-impl<R: std::io::BufRead, W: std::io::Write> ExprVisitor for Interpreter<R, W> {
-    type Value = EvalResult;
+        Ok(LoxValue::Nil)
+    }
 
     fn visit_expr(&mut self, expr: Expr) -> Self::Value {
         match expr {
@@ -329,6 +350,7 @@ impl<R: std::io::BufRead, W: std::io::Write> ExprVisitor for Interpreter<R, W> {
                 .ok_or_else(|| EvalError::UndefinedVariable(var.name)),
             Expr::Assignment(id, expr) => self.visit_assignment_expr(id, *expr),
             Expr::Logical(left, op, right) => self.visit_logical_expr(*left, op, *right),
+            Expr::Call(callee, arguments) => self.visit_call_expr(*callee, arguments),
         }
     }
 
@@ -398,6 +420,17 @@ impl<R: std::io::BufRead, W: std::io::Write> ExprVisitor for Interpreter<R, W> {
             (LoxValue::Bool(true), LogicalOperator::And) => Ok(self.visit_expr(right)?),
             _ => unreachable!(),
         }
+    }
+
+    fn visit_call_expr(&mut self, callee: Expr, arguments: Vec<Expr>) -> Self::Value {
+        let callee = self.visit_expr(callee)?;
+
+        let arguments: Result<Vec<LoxValue>, EvalError> = arguments
+            .into_iter()
+            .map(|expr| Ok(self.visit_expr(expr)?))
+            .collect();
+
+        todo!("call function");
     }
 }
 

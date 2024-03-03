@@ -427,7 +427,51 @@ impl<'p> Parser<'p> {
             return Ok(Expr::Unary(op, Box::new(right)));
         }
 
-        self.parse_primary()
+        self.parse_call()
+    }
+
+    fn parse_call(&mut self) -> ParseResult<Expr> {
+        let expr = self.parse_primary()?;
+
+        if self
+            .lexer
+            .peek()
+            .is_some_and(|t| t.kind != TokenType::LeftParen)
+        {
+            let _ = self.lexer.next();
+
+            let mut arguments = Vec::new();
+
+            match self.lexer.peek() {
+                Some(t) => match t.kind {
+                    TokenType::RightParen => {
+                        let _ = self.lexer.next();
+
+                        return Ok(Expr::Call(Box::new(expr), arguments));
+                    }
+                    _ => {
+                        arguments.push(self.parse_expr()?);
+
+                        while self
+                            .lexer
+                            .peek()
+                            .is_some_and(|t| t.kind == TokenType::Comma)
+                        {
+                            let _ = self.lexer.next();
+
+                            arguments.push(self.parse_expr()?);
+                        }
+
+                        self.consume_single_token(TokenType::RightParen)?;
+
+                        return Ok(Expr::Call(Box::new(expr), arguments));
+                    }
+                },
+                None => todo!("unexpected end of input"),
+            }
+        }
+
+        Ok(expr)
     }
 
     fn parse_primary(&mut self) -> ParseResult<Expr> {
@@ -638,6 +682,27 @@ mod tests {
                     name: "whenFalse".into(),
                 })))),
             ))],
+        };
+
+        assert_eq!(result.unwrap(), expected);
+    }
+
+    #[test]
+    fn parse_function_call() {
+        let input = "average(1, 2);";
+
+        let result = Parser::new(Lexer::new(input)).parse();
+
+        let expected = Program {
+            declarations: vec![Decl::Stmt(Stmt::Expr(Expr::Call(
+                Box::new(Expr::Var(Identifier {
+                    name: String::from("average"),
+                })),
+                vec![
+                    Expr::Literal(Literal::Number(Number::Int(1))),
+                    Expr::Literal(Literal::Number(Number::Int(2))),
+                ],
+            )))],
         };
 
         assert_eq!(result.unwrap(), expected);

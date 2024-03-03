@@ -5,9 +5,10 @@ use super::{
     stmt::Stmt,
 };
 
-pub trait ExprVisitor: Sized {
+pub trait Visitor: Sized {
     type Value;
 
+    // exprs
     fn visit_expr(&mut self, expr: Expr) -> Self::Value;
 
     fn visit_unary_expr(&mut self, op: UnaryOperator, expr: Expr) -> Self::Value;
@@ -21,18 +22,19 @@ pub trait ExprVisitor: Sized {
     fn visit_assignment_expr(&mut self, id: Identifier, expr: Expr) -> Self::Value;
 
     fn visit_logical_expr(&mut self, left: Expr, op: LogicalOperator, right: Expr) -> Self::Value;
-}
 
-pub trait StmtVisitor: Sized + ExprVisitor {
-    fn visit_program(&mut self, program: Program);
+    fn visit_call_expr(&mut self, callee: Expr, arguments: Vec<Expr>) -> Self::Value;
 
-    fn visit_declaration(&mut self, decl: Decl);
+    // stmts
+    fn visit_program(&mut self, program: Program) -> Self::Value;
 
-    fn visit_stmt(&mut self, stmt: Stmt);
+    fn visit_declaration(&mut self, decl: Decl) -> Self::Value;
 
-    fn visit_block(&mut self, block: Vec<Decl>);
+    fn visit_stmt(&mut self, stmt: Stmt) -> Self::Value;
 
-    fn visit_if_stmt(&mut self, cond: Expr, stmt: Stmt, else_stmt: Option<Stmt>);
+    fn visit_block(&mut self, block: Vec<Decl>) -> Self::Value;
 
-    fn visit_while_stmt(&mut self, cond: Expr, body: Stmt);
+    fn visit_if_stmt(&mut self, cond: Expr, stmt: Stmt, else_stmt: Option<Stmt>) -> Self::Value;
+
+    fn visit_while_stmt(&mut self, cond: Expr, body: Stmt) -> Self::Value;
 }
