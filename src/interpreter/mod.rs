@@ -128,6 +128,12 @@ pub enum EvalError {
     TypeError(String),
 }
 
+trait Callable {
+    fn arity(&self) -> usize;
+
+    fn call(&self, interpreter: &mut Interpreter, args: Vec<LoxValue>) -> EvalResult;
+}
+
 #[derive(Debug, Clone)]
 enum LoxFunction {
     Builtin {
@@ -201,16 +207,7 @@ impl Env {
 pub struct Interpreter<'i> {
     reader: Box<dyn BufRead + 'i>,
     writer: Box<dyn Write + 'i>,
-    state: InterpreterState,
     env: Env,
-}
-
-#[derive(Debug)]
-enum InterpreterState {
-    Ready,
-    Evaluating,
-    Done,
-    Error(EvalError),
 }
 
 impl<'i> Interpreter<'i> {
@@ -218,15 +215,12 @@ impl<'i> Interpreter<'i> {
         Self {
             reader,
             writer,
-            state: InterpreterState::Ready,
             env: Env::new_with_builtins(),
         }
     }
 
-    pub fn eval(&mut self, program: Program) {
-        self.state = InterpreterState::Evaluating;
-        self.visit_program(program);
-        self.state = InterpreterState::Done;
+    pub fn eval(&mut self, program: Program) -> EvalResult {
+        self.visit_program(program)
     }
 }
 
@@ -237,7 +231,7 @@ impl<'i> Visitor for Interpreter<'i> {
         program
             .declarations
             .iter()
-            .map(|d| self.visit_declaration(*d))
+            .map(|d| self.visit_declaration(d.to_owned()))
             .last()
             .unwrap_or(Ok(LoxValue::Nil))
     }
@@ -270,7 +264,7 @@ impl<'i> Visitor for Interpreter<'i> {
             Decl::Var(id, expr) => match expr {
                 Some(expr) => match self.visit_expr(expr) {
                     Ok(value) => {
-                        self.env.define(id.name, value);
+                        self.env.define(id.name, value.clone());
                         Ok(value)
                     }
                     Err(err) => {
@@ -324,7 +318,7 @@ impl<'i> Visitor for Interpreter<'i> {
             match expr {
                 Ok(val) => {
                     if is_truthy(val) == LoxValue::Bool(true) {
-                        self.visit_stmt(body.clone());
+                        let _ = self.visit_stmt(body.clone())?;
                     } else {
                         break;
                     }
@@ -463,15 +457,13 @@ mod tests {
             .parse()
             .unwrap();
 
-        let mock_reader = b"test";
+        let mock_reader = Box::new(&b""[..]);
 
-        let mut interpreter = Interpreter::new(&mock_reader[..], Vec::new());
+        let mut interpreter = Interpreter::new(mock_reader, Box::new(String::new()));
 
-        interpreter.eval(ast);
+        let result = interpreter.eval(ast);
 
-        let result = String::from_utf8(interpreter.get_writer().clone()).unwrap();
-
-        assert_eq!(result.trim(), "-5617.41");
+        assert_eq!(result.unwrap(), LoxValue::Float(-5617.41));
     }
 
     #[test]
@@ -482,14 +474,12 @@ mod tests {
         .parse()
         .unwrap();
 
-        let mock_reader = b"";
+        let mock_reader = Box::new(&b""[..]);
 
-        let mut interpreter = Interpreter::new(&mock_reader[..], Vec::new());
+        let mut interpreter = Interpreter::new(mock_reader, Box::new(String::new()));
 
-        interpreter.eval(ast);
+        let result = interpreter.eval(ast);
 
-        let result = String::from_utf8(interpreter.get_writer().clone()).unwrap();
-
-        assert_eq!(result.trim(), "\"hello world\"");
+        assert_eq!(result.unwrap(), LoxValue::String("hello world".into()));
     }
 }

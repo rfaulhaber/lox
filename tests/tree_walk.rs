@@ -12,12 +12,13 @@ macro_rules! make_test {
                 mut interpreter,
                 ast,
                 expected,
+                writer,
                 ..
             } = test_case;
 
-            interpreter.eval(ast);
+            let _ = interpreter.eval(ast).unwrap();
 
-            let result = String::from_utf8(interpreter.get_writer().clone()).unwrap();
+            let result = *writer;
 
             assert_eq!(result, expected);
         }

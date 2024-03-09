@@ -5,8 +5,9 @@ pub struct TestCase<'t> {
     pub name: String,
     pub code: String,
     pub expected: String,
-    pub interpreter: Interpreter<&'t [u8], Vec<u8>>,
+    pub interpreter: Interpreter<'t>,
     pub ast: Program,
+    pub writer: Box<String>,
 }
 
 impl<'t> TestCase<'t> {
@@ -24,7 +25,9 @@ impl<'t> TestCase<'t> {
         let mut code_file = File::open(code_path)?;
         let mut expected_file = File::open(expected_path)?;
 
-        let interpreter = Interpreter::new(&b""[..], Vec::new());
+        let writer = Box::new(String::new());
+
+        let interpreter = Interpreter::new(Box::new(&b""[..]), writer.clone());
 
         let mut code = String::new();
         let mut expected = String::new();
@@ -40,6 +43,7 @@ impl<'t> TestCase<'t> {
             expected,
             ast,
             interpreter,
+            writer,
         })
     }
 }
