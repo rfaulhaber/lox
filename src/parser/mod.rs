@@ -436,7 +436,7 @@ impl<'p> Parser<'p> {
         if self
             .lexer
             .peek()
-            .is_some_and(|t| t.kind != TokenType::LeftParen)
+            .is_some_and(|t| t.kind == TokenType::LeftParen)
         {
             let _ = self.lexer.next();
 
