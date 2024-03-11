@@ -129,34 +129,30 @@ pub enum EvalError {
     TypeError(String),
 }
 
-trait Callable<R, W>
-where
-    R: BufRead,
-    W: Write,
-{
-    fn arity(&self) -> usize;
-
-    fn call(&self, interpreter: &mut Interpreter<R, W>, args: Vec<LoxValue>) -> EvalResult;
-}
-
 #[derive(Debug, Clone)]
-enum LoxFunction {
-    Builtin {
+enum Callable {
+    Native {
+        name: String,
         arity: usize,
         func: fn(Vec<LoxValue>) -> EvalResult,
     },
+    Function {
+        name: String,
+        parameters: Vec<String>,
+        body: Vec<Stmt>,
+    },
 }
 
-// #[derive(Debug, Clone)]
-// enum LoxEnvValue {
-//     Value(LoxValue),
-//     Callable(LoxCallable),
-// }
+#[derive(Debug, Clone)]
+enum LoxEnvValue {
+    Value(LoxValue),
+    Callable(Callable),
+}
 
 #[derive(Debug, Clone)]
 struct Env {
     outer: Option<Box<Env>>,
-    values: HashMap<String, LoxValue>,
+    values: HashMap<String, LoxEnvValue>,
 }
 
 impl Env {
@@ -167,7 +163,7 @@ impl Env {
     }
 
     pub fn define(&mut self, name: String, value: LoxValue) {
-        self.values.insert(name, value);
+        self.values.insert(name, LoxEnvValue::Value(value));
     }
 
     pub fn assign(&mut self, name: String, value: LoxValue) -> Result<(), EvalError> {
@@ -234,6 +230,17 @@ impl<R: BufRead, W: Write> Interpreter<R, W> {
 
     pub fn get_output(&mut self) -> &W {
         self.writer.borrow()
+    }
+
+    fn call(&mut self, callable: Callable) -> EvalResult {
+        match callable {
+            Callable::Native { name, arity, func } => todo!(),
+            Callable::Function {
+                name,
+                parameters,
+                body,
+            } => todo!(),
+        }
     }
 }
 
