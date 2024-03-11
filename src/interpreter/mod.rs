@@ -1,9 +1,10 @@
 use thiserror::Error;
 
 use std::{
+    borrow::{Borrow, BorrowMut},
     cmp::Ordering,
     collections::HashMap,
-    fmt::{Display, Write},
+    fmt::{Display, Pointer, Write},
     io::BufRead,
     ops::{Add, Div, Mul, Sub},
 };
@@ -128,10 +129,14 @@ pub enum EvalError {
     TypeError(String),
 }
 
-trait Callable {
+trait Callable<R, W>
+where
+    R: BufRead,
+    W: Write,
+{
     fn arity(&self) -> usize;
 
-    fn call(&self, interpreter: &mut Interpreter, args: Vec<LoxValue>) -> EvalResult;
+    fn call(&self, interpreter: &mut Interpreter<R, W>, args: Vec<LoxValue>) -> EvalResult;
 }
 
 #[derive(Debug, Clone)]
@@ -204,27 +209,35 @@ impl Env {
 }
 
 // TODO implement builder pattern?
-pub struct Interpreter<'i> {
-    reader: Box<dyn BufRead + 'i>,
-    writer: Box<dyn Write + 'i>,
+pub struct Interpreter<R, W>
+where
+    R: BufRead,
+    W: Write,
+{
+    reader: R,
+    writer: W,
     env: Env,
 }
 
-impl<'i> Interpreter<'i> {
-    pub fn new(reader: Box<dyn BufRead>, writer: Box<dyn Write>) -> Self {
+impl<R: BufRead, W: Write> Interpreter<R, W> {
+    pub fn new(reader: R, writer: W) -> Self {
         Self {
             reader,
             writer,
-            env: Env::new_with_builtins(),
+            env: Env::new(),
         }
     }
 
     pub fn eval(&mut self, program: Program) -> EvalResult {
         self.visit_program(program)
     }
+
+    pub fn get_output(&mut self) -> &W {
+        self.writer.borrow()
+    }
 }
 
-impl<'i> Visitor for Interpreter<'i> {
+impl<R: BufRead, W: Write> Visitor for Interpreter<R, W> {
     type Value = EvalResult;
 
     fn visit_program(&mut self, program: Program) -> Self::Value {
@@ -247,6 +260,7 @@ impl<'i> Visitor for Interpreter<'i> {
                     Err(ref e) => format!("{}", e),
                 };
 
+                println!("writing");
                 writeln!(self.writer, "{}", output).unwrap();
 
                 Ok(LoxValue::Nil)
@@ -459,11 +473,15 @@ mod tests {
 
         let mock_reader = Box::new(&b""[..]);
 
-        let mut interpreter = Interpreter::new(mock_reader, Box::new(String::new()));
+        let mut writer = String::new();
+
+        let mut interpreter = Interpreter::new(mock_reader, &mut writer);
 
         let result = interpreter.eval(ast);
 
-        assert_eq!(result.unwrap(), LoxValue::Float(-5617.41));
+        assert!(matches!(result, Ok(LoxValue::Nil)));
+
+        assert_eq!(writer.trim(), "-5617.41");
     }
 
     #[test]
@@ -476,10 +494,14 @@ mod tests {
 
         let mock_reader = Box::new(&b""[..]);
 
-        let mut interpreter = Interpreter::new(mock_reader, Box::new(String::new()));
+        let mut writer = String::new();
+
+        let mut interpreter = Interpreter::new(mock_reader, &mut writer);
 
         let result = interpreter.eval(ast);
 
-        assert_eq!(result.unwrap(), LoxValue::String("hello world".into()));
+        assert!(matches!(result, Ok(LoxValue::Nil)));
+
+        assert_eq!(writer.trim(), "\"hello world\"");
     }
 }

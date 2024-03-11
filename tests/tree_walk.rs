@@ -12,15 +12,16 @@ macro_rules! make_test {
                 mut interpreter,
                 ast,
                 expected,
-                writer,
                 ..
             } = test_case;
 
-            let _ = interpreter.eval(ast).unwrap();
+            let result = interpreter.eval(ast);
 
-            let result = *writer;
+            assert!(result.is_ok());
 
-            assert_eq!(result, expected);
+            let output = interpreter.get_output();
+
+            assert_eq!(*output, expected);
         }
     };
 }
