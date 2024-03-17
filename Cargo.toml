@@ -11,6 +11,7 @@ anyhow = "1.0.71"
 miette = { version = "5.10.0", features = ["fancy"] }
 rustyline = "12.0.0"
 thiserror = "1.0.43"
+chrono = "0.4.35"
 
 [dev-dependencies]
 pretty_assertions = "1.4.0"

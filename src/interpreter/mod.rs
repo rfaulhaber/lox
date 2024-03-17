@@ -1,10 +1,10 @@
 use thiserror::Error;
 
 use std::{
-    borrow::{Borrow, BorrowMut},
+    borrow::Borrow,
     cmp::Ordering,
     collections::HashMap,
-    fmt::{Display, Pointer, Write},
+    fmt::{Display, Write},
     io::BufRead,
     ops::{Add, Div, Mul, Sub},
 };
@@ -50,6 +50,7 @@ pub enum LoxValue {
     Int(i64),
     Float(f64),
     String(String),
+    Callable(Callable),
 }
 
 impl Display for LoxValue {
@@ -60,6 +61,12 @@ impl Display for LoxValue {
             LoxValue::Int(i) => write!(f, "{}", i),
             LoxValue::Float(fl) => write!(f, "{}", fl),
             LoxValue::String(s) => write!(f, "{}", s),
+            LoxValue::Callable(Callable::Native { name, .. }) => {
+                write!(f, "<builtin func {}>", name)
+            }
+            LoxValue::Callable(Callable::Function { name, .. }) => {
+                write!(f, "<func {}>", name)
+            }
         }
     }
 }
@@ -115,6 +122,15 @@ impl LoxValue {
             (LoxValue::Int(_), _) => false,
             (LoxValue::Float(_), _) => false,
             (LoxValue::String(_), _) => false,
+            (
+                LoxValue::Callable(Callable::Native { name: left, .. }),
+                LoxValue::Callable(Callable::Native { name: right, .. }),
+            ) => left == right,
+            (
+                LoxValue::Callable(Callable::Function { name: left, .. }),
+                LoxValue::Callable(Callable::Function { name: right, .. }),
+            ) => left == right,
+            _ => false,
         }
     }
 }
@@ -127,9 +143,11 @@ pub enum EvalError {
     UndefinedVariable(String),
     #[error("Type error: {0}")]
     TypeError(String),
+    #[error("Not callable: {0}")]
+    NotCallable(LoxValue),
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 enum Callable {
     Native {
         name: String,
@@ -144,26 +162,33 @@ enum Callable {
 }
 
 #[derive(Debug, Clone)]
-enum LoxEnvValue {
-    Value(LoxValue),
-    Callable(Callable),
-}
-
-#[derive(Debug, Clone)]
 struct Env {
     outer: Option<Box<Env>>,
-    values: HashMap<String, LoxEnvValue>,
+    values: HashMap<String, LoxValue>,
 }
 
 impl Env {
     pub fn new_with_builtins() -> Self {
         let mut env = Env::new();
 
-        todo!();
+        env.define(
+            "clock".into(),
+            LoxValue::Callable(Callable::Native {
+                name: "clock".into(),
+                arity: 0,
+                func: |_args: Vec<LoxValue>| {
+                    Ok(LoxValue::Int(
+                        chrono::offset::Local::now().timestamp_millis(),
+                    ))
+                },
+            }),
+        );
+
+        env
     }
 
     pub fn define(&mut self, name: String, value: LoxValue) {
-        self.values.insert(name, LoxEnvValue::Value(value));
+        self.values.insert(name, value);
     }
 
     pub fn assign(&mut self, name: String, value: LoxValue) -> Result<(), EvalError> {
@@ -220,7 +245,7 @@ impl<R: BufRead, W: Write> Interpreter<R, W> {
         Self {
             reader,
             writer,
-            env: Env::new(),
+            env: Env::new_with_builtins(),
         }
     }
 
@@ -232,9 +257,9 @@ impl<R: BufRead, W: Write> Interpreter<R, W> {
         self.writer.borrow()
     }
 
-    fn call(&mut self, callable: Callable) -> EvalResult {
+    fn call(&mut self, callable: Callable, args: Vec<LoxValue>) -> EvalResult {
         match callable {
-            Callable::Native { name, arity, func } => todo!(),
+            Callable::Native { name, arity, func } => func(args),
             Callable::Function {
                 name,
                 parameters,
@@ -438,14 +463,19 @@ impl<R: BufRead, W: Write> Visitor for Interpreter<R, W> {
     }
 
     fn visit_call_expr(&mut self, callee: Expr, arguments: Vec<Expr>) -> Self::Value {
-        let callee = self.visit_expr(callee)?;
+        let callee_val = self.visit_expr(callee)?;
 
         let arguments: Result<Vec<LoxValue>, EvalError> = arguments
             .into_iter()
             .map(|expr| Ok(self.visit_expr(expr)?))
             .collect();
 
-        todo!("call function");
+        let callee = match callee_val {
+            LoxValue::Callable(c) => c,
+            v => return Err(EvalError::NotCallable(v)),
+        };
+
+        self.call(callee, arguments?)
     }
 }
 
