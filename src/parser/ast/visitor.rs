@@ -37,4 +37,11 @@ pub trait Visitor: Sized {
     fn visit_if_stmt(&mut self, cond: Expr, stmt: Stmt, else_stmt: Option<Stmt>) -> Self::Value;
 
     fn visit_while_stmt(&mut self, cond: Expr, body: Stmt) -> Self::Value;
+
+    fn visit_func_declaration(
+        &mut self,
+        name: Identifier,
+        parameters: Vec<Identifier>,
+        body: Stmt,
+    ) -> Self::Value;
 }

@@ -57,9 +57,17 @@ make_test!(basic_logic);
 make_test!(basic_while);
 make_test!(for_loop);
 make_test!(builtin_call, |output: &String| {
+    let current_time = chrono::offset::Local::now().timestamp_millis();
+    let received_time = output.trim().parse::<i64>();
+
+    assert!(received_time.is_ok());
+
+    let diff = received_time.unwrap() - current_time;
+
     assert!(
-        output.trim().parse::<i64>().is_ok(),
-        "received output: {:?}",
-        output
+        diff < 10, // idk, arbitrary
+        "Recieved large diff between current time and parsed time: {}",
+        diff
     );
 });
+make_test!(basic_function_call);

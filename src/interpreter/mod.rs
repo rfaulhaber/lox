@@ -61,10 +61,18 @@ impl Display for LoxValue {
             LoxValue::Int(i) => write!(f, "{}", i),
             LoxValue::Float(fl) => write!(f, "{}", fl),
             LoxValue::String(s) => write!(f, "{}", s),
-            LoxValue::Callable(Callable::Native { name, .. }) => {
+            LoxValue::Callable(c) => write!(f, "{}", c),
+        }
+    }
+}
+
+impl Display for Callable {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Callable::Native { name, .. } => {
                 write!(f, "<builtin func {}>", name)
             }
-            LoxValue::Callable(Callable::Function { name, .. }) => {
+            Callable::Function { name, .. } => {
                 write!(f, "<func {}>", name)
             }
         }
@@ -84,12 +92,17 @@ impl LoxValue {
             (LoxValue::Int(l), LoxValue::Float(r)) => Ok(LoxValue::Float((l as f64).add(r))),
             (LoxValue::Float(l), LoxValue::Int(r)) => Ok(LoxValue::Float(l.add(r as f64))),
             (LoxValue::String(s), right) => {
-                let right_str = format!("{}", right);
+                let right_str: String = match right {
+                    LoxValue::Nil => "nil".into(),
+                    LoxValue::Bool(true) => "true".into(),
+                    LoxValue::Bool(false) => "false".into(),
+                    LoxValue::Int(i) => i.to_string(),
+                    LoxValue::Float(f) => f.to_string(),
+                    LoxValue::String(s) => s,
+                    LoxValue::Callable(c) => format!("{}", c),
+                };
 
-                let mut new_str = String::from(s);
-                new_str.push_str(&right_str);
-
-                Ok(LoxValue::String(new_str))
+                Ok(LoxValue::String(format!("{}{}", s, right_str)))
             }
             _ => Err(EvalError::TypeMismatch(
                 "arithmetic".into(),
@@ -145,6 +158,8 @@ pub enum EvalError {
     TypeError(String),
     #[error("Not callable: {0}")]
     NotCallable(LoxValue),
+    #[error("Function {0} not called with enough arguments (expecting {1} but got {2})")]
+    NotEnoughArguments(String, usize, usize),
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -157,7 +172,7 @@ enum Callable {
     Function {
         name: String,
         parameters: Vec<String>,
-        body: Vec<Stmt>,
+        body: Stmt,
     },
 }
 
@@ -264,7 +279,35 @@ impl<R: BufRead, W: Write> Interpreter<R, W> {
                 name,
                 parameters,
                 body,
-            } => todo!(),
+            } => {
+                if args.len() != parameters.len() {
+                    return Err(EvalError::NotEnoughArguments(
+                        name,
+                        parameters.len(),
+                        args.len(),
+                    ));
+                }
+
+                let current_env = self.env.clone();
+
+                self.env = Env::from_outer(self.env.clone());
+
+                parameters
+                    .into_iter()
+                    .zip(args.into_iter())
+                    .for_each(|(parameter, arg)| {
+                        self.env.define(parameter, arg);
+                    });
+
+                let result = match body {
+                    Stmt::Block(v) => self.visit_block(v),
+                    _ => unreachable!("didn't get a block"),
+                };
+
+                self.env = current_env;
+
+                result
+            }
         }
     }
 }
@@ -323,6 +366,9 @@ impl<R: BufRead, W: Write> Visitor for Interpreter<R, W> {
                 }
             },
             Decl::Stmt(stmt) => self.visit_stmt(stmt),
+            Decl::Func(name, parameters, body) => {
+                self.visit_func_declaration(name, parameters, body)
+            }
         }
     }
 
@@ -477,6 +523,25 @@ impl<R: BufRead, W: Write> Visitor for Interpreter<R, W> {
 
         self.call(callee, arguments?)
     }
+
+    fn visit_func_declaration(
+        &mut self,
+        name: Identifier,
+        parameters: Vec<Identifier>,
+        body: Stmt,
+    ) -> Self::Value {
+        let name = name.name;
+
+        let func = LoxValue::Callable(Callable::Function {
+            name: name.clone(),
+            parameters: parameters.into_iter().map(|i| i.name).collect(),
+            body,
+        });
+
+        self.env.define(name, func);
+
+        Ok(LoxValue::Nil)
+    }
 }
 
 impl Into<LoxValue> for Number {
@@ -525,6 +590,27 @@ mod tests {
     fn eval_variable() {
         let ast = Parser::new(Lexer::new(
             std::str::from_utf8(b"var test = \"hello world\";\nprint test;").unwrap(),
+        ))
+        .parse()
+        .unwrap();
+
+        let mock_reader = Box::new(&b""[..]);
+
+        let mut writer = String::new();
+
+        let mut interpreter = Interpreter::new(mock_reader, &mut writer);
+
+        let result = interpreter.eval(ast);
+
+        assert!(matches!(result, Ok(LoxValue::Nil)));
+
+        assert_eq!(writer.trim(), "\"hello world\"");
+    }
+
+    #[test]
+    fn string_concat() {
+        let ast = Parser::new(Lexer::new(
+            std::str::from_utf8(b"var test = \"hello\" + \" \" + \"world\";\nprint test;").unwrap(),
         ))
         .parse()
         .unwrap();

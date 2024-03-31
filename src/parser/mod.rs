@@ -74,6 +74,7 @@ impl<'p> Parser<'p> {
 
     fn parse_decl(&mut self) -> ParseResult<Decl> {
         match self.lexer.peek() {
+            Some(t) if t.kind == TokenType::Fun => self.parse_func_decl(),
             Some(t) if t.kind == TokenType::Var => self.parse_decl_stmt(),
             Some(_) => Ok(Decl::Stmt(self.parse_stmt()?)),
             None => todo!(),
@@ -232,13 +233,7 @@ impl<'p> Parser<'p> {
     fn parse_decl_stmt(&mut self) -> ParseResult<Decl> {
         let _ = self.lexer.next(); // discard "var"
 
-        let id = match self.lexer.next() {
-            Some(t) if t.kind == TokenType::Identifier => t.literal,
-            Some(t) => todo!("unexpected token: {:?}", t),
-            None => todo!("unexpected end of input"),
-        };
-
-        let identifier = Identifier { name: id };
+        let identifier = self.parse_identifier()?;
 
         match self.lexer.next() {
             Some(t) if t.kind == TokenType::Equal => {
@@ -253,6 +248,67 @@ impl<'p> Parser<'p> {
                 todo!("Unexpected token")
             }
             None => todo!(),
+        }
+    }
+
+    fn parse_func_decl(&mut self) -> ParseResult<Decl> {
+        let _ = self.lexer.next(); // discard "func"
+
+        let func_name = self.parse_identifier()?;
+
+        let params = self.parse_func_params()?;
+
+        let body = self.parse_block()?;
+
+        Ok(Decl::Func(func_name, params, body))
+    }
+
+    fn parse_func_params(&mut self) -> ParseResult<Vec<Identifier>> {
+        let _ = self.consume_single_token(TokenType::LeftParen)?;
+
+        match self.lexer.peek() {
+            Some(t) if t.kind == TokenType::RightParen => {
+                let _ = self.lexer.next();
+
+                Ok(vec![])
+            }
+            Some(t) if t.kind == TokenType::Identifier => {
+                let mut params = Vec::new();
+
+                loop {
+                    let id = self.parse_identifier()?;
+
+                    params.push(id);
+
+                    match self.lexer.next() {
+                        Some(t) if t.kind == TokenType::Comma => {
+                            continue;
+                        }
+                        Some(t) if t.kind == TokenType::RightParen => {
+                            break;
+                        }
+                        Some(t) => {
+                            return Err(ParseError::UnexpectedToken(TokenType::Comma, t.kind))
+                        }
+                        None => return Err(ParseError::UnexpectedEndOfInput),
+                    }
+                }
+
+                Ok(params)
+            }
+            Some(t) => Err(ParseError::UnexpectedToken(
+                TokenType::Identifier,
+                t.clone().kind,
+            )),
+            None => Err(ParseError::UnexpectedEndOfInput),
+        }
+    }
+
+    fn parse_identifier(&mut self) -> ParseResult<Identifier> {
+        match self.lexer.next() {
+            Some(t) if t.kind == TokenType::Identifier => Ok(Identifier { name: t.literal }),
+            Some(t) => Err(ParseError::UnexpectedToken(TokenType::Identifier, t.kind)),
+            None => Err(ParseError::UnexpectedEndOfInput),
         }
     }
 
