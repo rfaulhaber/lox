@@ -60,7 +60,7 @@ impl Display for LoxValue {
             LoxValue::Bool(b) => write!(f, "{}", b),
             LoxValue::Int(i) => write!(f, "{}", i),
             LoxValue::Float(fl) => write!(f, "{}", fl),
-            LoxValue::String(s) => write!(f, "{}", s),
+            LoxValue::String(s) => write!(f, "\"{}\"", s),
             LoxValue::Callable(c) => write!(f, "{}", c),
         }
     }
@@ -479,7 +479,8 @@ impl<R: BufRead, W: Write> Visitor for Interpreter<R, W> {
     fn visit_literal(&mut self, literal: Literal) -> Self::Value {
         Ok(match literal {
             Literal::Number(n) => n.into(),
-            Literal::String(s) => LoxValue::String(s),
+            // for lox values, we trim the surrounding double quotes
+            Literal::String(s) => LoxValue::String(String::from(s.get(1..(s.len() - 1)).unwrap())),
             Literal::Bool(b) => LoxValue::Bool(b),
             Literal::Nil => LoxValue::Nil,
         })
