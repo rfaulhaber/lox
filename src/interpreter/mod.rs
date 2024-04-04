@@ -102,7 +102,11 @@ impl LoxValue {
                     LoxValue::Callable(c) => format!("{}", c),
                 };
 
-                Ok(LoxValue::String(format!("{}{}", s, right_str)))
+                let mut new_str = String::new();
+                new_str.push_str(&s);
+                new_str.push_str(&right_str);
+
+                Ok(LoxValue::String(new_str))
             }
             _ => Err(EvalError::TypeMismatch(
                 "arithmetic".into(),
