@@ -349,6 +349,7 @@ impl<R: BufRead, W: Write> Visitor for Interpreter<R, W> {
                 self.visit_if_stmt(cond, *if_stmt, else_stmt.map(|stmt| *stmt))
             }
             Stmt::While(cond, body) => self.visit_while_stmt(cond, *body),
+            Stmt::Return(_) => todo!(),
         }
     }
 

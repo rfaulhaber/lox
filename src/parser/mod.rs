@@ -89,6 +89,7 @@ impl<'p> Parser<'p> {
                 TokenType::If => self.parse_if_stmt(),
                 TokenType::While => self.parse_while_stmt(),
                 TokenType::For => self.parse_for_stmt(),
+                TokenType::Return => self.parse_return(),
                 _ => self.parse_expr_stmt(),
             },
             None => todo!(),
@@ -310,6 +311,24 @@ impl<'p> Parser<'p> {
             Some(t) => Err(ParseError::UnexpectedToken(TokenType::Identifier, t.kind)),
             None => Err(ParseError::UnexpectedEndOfInput),
         }
+    }
+
+    fn parse_return(&mut self) -> ParseResult<Stmt> {
+        let _ = self.lexer.next(); // consume "return"
+
+        let expr = match self.lexer.peek() {
+            Some(Token {
+                kind: TokenType::Semicolon,
+                ..
+            }) => {
+                let _ = self.lexer.next(); // consume semicolon
+                None
+            }
+            Some(_) => Some(self.parse_expr()?),
+            None => return Err(ParseError::UnexpectedEndOfInput),
+        };
+
+        Ok(Stmt::Return(expr))
     }
 
     fn parse_expr(&mut self) -> ParseResult<Expr> {
