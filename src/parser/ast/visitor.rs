@@ -44,4 +44,6 @@ pub trait Visitor: Sized {
         parameters: Vec<Identifier>,
         body: Stmt,
     ) -> Self::Value;
+
+    fn visit_return_stmt(&mut self, expr: Option<Expr>) -> Self::Value;
 }

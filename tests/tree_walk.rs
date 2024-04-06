@@ -71,3 +71,4 @@ make_test!(builtin_call, |output: &String| {
     );
 });
 make_test!(basic_function_call);
+make_test!(return_stmt);

@@ -304,7 +304,7 @@ impl<R: BufRead, W: Write> Interpreter<R, W> {
                     });
 
                 let result = match body {
-                    Stmt::Block(v) => self.visit_block(v),
+                    Stmt::Block(v) => self.eval_fn_block(v),
                     _ => unreachable!("didn't get a block"),
                 };
 
@@ -313,6 +313,20 @@ impl<R: BufRead, W: Write> Interpreter<R, W> {
                 result
             }
         }
+    }
+
+    fn eval_fn_block(&mut self, block: Vec<Decl>) -> EvalResult {
+        let mut result = Ok(LoxValue::Nil);
+
+        for stmt in block.into_iter() {
+            if matches!(stmt, Decl::Stmt(Stmt::Return(_))) {
+                return self.visit_declaration(stmt);
+            }
+
+            result = self.visit_declaration(stmt);
+        }
+
+        result
     }
 }
 
@@ -349,7 +363,7 @@ impl<R: BufRead, W: Write> Visitor for Interpreter<R, W> {
                 self.visit_if_stmt(cond, *if_stmt, else_stmt.map(|stmt| *stmt))
             }
             Stmt::While(cond, body) => self.visit_while_stmt(cond, *body),
-            Stmt::Return(_) => todo!(),
+            Stmt::Return(expr) => self.visit_return_stmt(expr),
         }
     }
 
@@ -547,6 +561,10 @@ impl<R: BufRead, W: Write> Visitor for Interpreter<R, W> {
         self.env.define(name, func);
 
         Ok(LoxValue::Nil)
+    }
+
+    fn visit_return_stmt(&mut self, expr: Option<Expr>) -> Self::Value {
+        expr.map_or(Ok(LoxValue::Nil), |expr| self.visit_expr(expr))
     }
 }
 
