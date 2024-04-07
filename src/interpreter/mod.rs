@@ -164,6 +164,8 @@ pub enum EvalError {
     NotCallable(LoxValue),
     #[error("Function {0} not called with enough arguments (expecting {1} but got {2})")]
     NotEnoughArguments(String, usize, usize),
+    #[error("Internal return")]
+    InternalReturn(LoxValue),
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -278,7 +280,7 @@ impl<R: BufRead, W: Write> Interpreter<R, W> {
 
     fn call(&mut self, callable: Callable, args: Vec<LoxValue>) -> EvalResult {
         match callable {
-            Callable::Native { name, arity, func } => func(args),
+            Callable::Native { func, .. } => func(args),
             Callable::Function {
                 name,
                 parameters,
@@ -319,11 +321,11 @@ impl<R: BufRead, W: Write> Interpreter<R, W> {
         let mut result = Ok(LoxValue::Nil);
 
         for stmt in block.into_iter() {
-            if matches!(stmt, Decl::Stmt(Stmt::Return(_))) {
-                return self.visit_declaration(stmt);
-            }
-
-            result = self.visit_declaration(stmt);
+            result = match self.visit_declaration(stmt) {
+                Ok(val) => Ok(val),
+                Err(EvalError::InternalReturn(val)) => return Ok(val),
+                Err(e) => return Err(e),
+            };
         }
 
         result
@@ -353,7 +355,6 @@ impl<R: BufRead, W: Write> Visitor for Interpreter<R, W> {
                     Err(ref e) => format!("{}", e),
                 };
 
-                println!("writing");
                 writeln!(self.writer, "{}", output).unwrap();
 
                 Ok(LoxValue::Nil)
@@ -413,13 +414,11 @@ impl<R: BufRead, W: Write> Visitor for Interpreter<R, W> {
                 LoxValue::Bool(true) => self.visit_stmt(stmt),
                 LoxValue::Bool(false) => match else_stmt {
                     Some(stmt) => self.visit_stmt(stmt),
-                    None => todo!("return error"),
+                    None => Ok(LoxValue::Nil),
                 },
                 _ => unreachable!(),
             },
-            Err(e) => {
-                todo!("return error")
-            }
+            Err(e) => Err(e),
         }
     }
 
@@ -564,7 +563,8 @@ impl<R: BufRead, W: Write> Visitor for Interpreter<R, W> {
     }
 
     fn visit_return_stmt(&mut self, expr: Option<Expr>) -> Self::Value {
-        expr.map_or(Ok(LoxValue::Nil), |expr| self.visit_expr(expr))
+        let ret_val = expr.map_or(Ok(LoxValue::Nil), |expr| self.visit_expr(expr))?;
+        Err(EvalError::InternalReturn(ret_val))
     }
 }
 

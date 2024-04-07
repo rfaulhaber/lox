@@ -324,7 +324,12 @@ impl<'p> Parser<'p> {
                 let _ = self.lexer.next(); // consume semicolon
                 None
             }
-            Some(_) => Some(self.parse_expr()?),
+            Some(_) => {
+                let ret_expr = self.parse_expr()?;
+                let _ = self.lexer.next(); // parse semicolon, TODO assert
+
+                Some(ret_expr)
+            }
             None => return Err(ParseError::UnexpectedEndOfInput),
         };
 
