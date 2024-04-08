@@ -152,7 +152,7 @@ impl LoxValue {
     }
 }
 
-#[derive(Debug, Error)]
+#[derive(Debug, PartialEq, Error)]
 pub enum EvalError {
     #[error("Incompatible types for operation {0}: {1}, {2}")]
     TypeMismatch(String, LoxValue, LoxValue),
@@ -179,10 +179,27 @@ enum Callable {
         name: String,
         parameters: Vec<String>,
         body: Stmt,
+        closure: Env,
     },
 }
 
-#[derive(Debug, Clone)]
+impl Callable {
+    fn name(&self) -> String {
+        match self {
+            Callable::Native { name, .. } => name.to_string(),
+            Callable::Function { name, .. } => name.to_string(),
+        }
+    }
+
+    fn is_builtin(&self) -> bool {
+        match self {
+            Callable::Native { .. } => true,
+            Callable::Function { .. } => false,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
 struct Env {
     outer: Option<Box<Env>>,
     values: HashMap<String, LoxValue>,
@@ -285,6 +302,7 @@ impl<R: BufRead, W: Write> Interpreter<R, W> {
                 name,
                 parameters,
                 body,
+                closure,
             } => {
                 if args.len() != parameters.len() {
                     return Err(EvalError::NotEnoughArguments(
@@ -296,7 +314,13 @@ impl<R: BufRead, W: Write> Interpreter<R, W> {
 
                 let current_env = self.env.clone();
 
-                self.env = Env::from_outer(self.env.clone());
+                let mut local_env = Env::new();
+                local_env.outer = Some(Box::new(self.env.clone()));
+                local_env.values = closure.values;
+
+                self.env = local_env;
+
+                println!("func call env calling {:?}: {:?}", name, self.env.outer);
 
                 parameters
                     .into_iter()
@@ -551,11 +575,16 @@ impl<R: BufRead, W: Write> Visitor for Interpreter<R, W> {
     ) -> Self::Value {
         let name = name.name;
 
+        let closure = Env::from_outer(self.env.clone());
+
         let func = LoxValue::Callable(Callable::Function {
             name: name.clone(),
             parameters: parameters.into_iter().map(|i| i.name).collect(),
             body,
+            closure: closure.clone(),
         });
+
+        println!("closure for {:?}: {:?}", name, closure);
 
         self.env.define(name, func);
 

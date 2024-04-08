@@ -17,7 +17,7 @@ macro_rules! make_test {
 
             let result = interpreter.eval(ast);
 
-            assert!(result.is_ok());
+            assert!(result.is_ok(), "received err result: {:?}", result);
 
             let output = interpreter.get_output();
 
@@ -72,3 +72,4 @@ make_test!(builtin_call, |output: &String| {
 });
 make_test!(basic_function_call);
 make_test!(return_stmt);
+make_test!(closures);
