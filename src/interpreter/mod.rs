@@ -262,7 +262,7 @@ impl<R: BufRead, W: Write> Interpreter<R, W> {
                     _ => unreachable!("didn't get a block"),
                 };
 
-                self.env = current_env;
+                self.env = self.env.outer.clone().unwrap().borrow_mut().clone();
 
                 result
             }
@@ -345,8 +345,6 @@ impl<R: BufRead, W: Write> Visitor for Interpreter<R, W> {
     }
 
     fn visit_block(&mut self, block: Vec<Decl>) -> Self::Value {
-        let current_env = self.env.clone();
-
         self.env = Env::from_outer(self.env.clone());
 
         let result = block
@@ -355,7 +353,7 @@ impl<R: BufRead, W: Write> Visitor for Interpreter<R, W> {
             .last()
             .unwrap_or(Ok(LoxValue::Nil));
 
-        self.env = current_env.to_owned();
+        self.env = self.env.outer.clone().unwrap().borrow_mut().clone();
 
         result
     }
@@ -377,8 +375,10 @@ impl<R: BufRead, W: Write> Visitor for Interpreter<R, W> {
     }
 
     fn visit_while_stmt(&mut self, cond: Expr, body: Stmt) -> Self::Value {
+        println!("visiting while");
         loop {
             let expr = self.visit_expr(cond.clone());
+            println!("expr: {:?} {:?} i: {:?}", expr, cond, self.env.get("a"));
             match expr {
                 Ok(val) => {
                     if is_truthy(val) == LoxValue::Bool(true) {

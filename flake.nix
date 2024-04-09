@@ -41,6 +41,8 @@
           # needed for cargo
           # solves the "missing -liconv" issue
           libiconv
+
+          gdb
         ];
       };
     });
