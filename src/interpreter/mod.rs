@@ -1,9 +1,11 @@
+mod env;
+
+use env::Env;
 use thiserror::Error;
 
 use std::{
     borrow::Borrow,
     cmp::Ordering,
-    collections::HashMap,
     fmt::{Display, Write},
     io::BufRead,
     ops::{Add, Div, Mul, Sub},
@@ -199,74 +201,6 @@ impl Callable {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
-struct Env {
-    outer: Option<Box<Env>>,
-    values: HashMap<String, LoxValue>,
-}
-
-impl Env {
-    pub fn new_with_builtins() -> Self {
-        let mut env = Env::new();
-
-        env.define(
-            "clock".into(),
-            LoxValue::Callable(Callable::Native {
-                name: "clock".into(),
-                arity: 0,
-                func: |_args: Vec<LoxValue>| {
-                    Ok(LoxValue::Int(
-                        chrono::offset::Local::now().timestamp_millis(),
-                    ))
-                },
-            }),
-        );
-
-        env
-    }
-
-    pub fn define(&mut self, name: String, value: LoxValue) {
-        self.values.insert(name, value);
-    }
-
-    pub fn assign(&mut self, name: String, value: LoxValue) -> Result<(), EvalError> {
-        if self.values.contains_key(&name) {
-            self.values.insert(name.clone(), value.clone());
-
-            Ok(())
-        } else {
-            match self.outer {
-                Some(_) => self.outer.as_mut().unwrap().assign(name, value),
-                None => Err(EvalError::UndefinedVariable(name)),
-            }
-        }
-    }
-
-    pub fn get(&mut self, name: String) -> Option<LoxValue> {
-        self.values
-            .get(&name)
-            .cloned()
-            .or_else(|| match &self.outer {
-                Some(_) => self.outer.as_mut().unwrap().get(name),
-                None => None,
-            })
-    }
-
-    pub fn from_outer(outer: Env) -> Env {
-        Env {
-            outer: Some(Box::new(outer)),
-            values: HashMap::new(),
-        }
-    }
-
-    fn new() -> Self {
-        Self {
-            outer: None,
-            values: HashMap::new(),
-        }
-    }
-}
-
 // TODO implement builder pattern?
 pub struct Interpreter<R, W>
 where
@@ -314,13 +248,7 @@ impl<R: BufRead, W: Write> Interpreter<R, W> {
 
                 let current_env = self.env.clone();
 
-                let mut local_env = Env::new();
-                local_env.outer = Some(Box::new(self.env.clone()));
-                local_env.values = closure.values;
-
-                self.env = local_env;
-
-                println!("func call env calling {:?}: {:?}", name, self.env.outer);
+                self.env = closure;
 
                 parameters
                     .into_iter()
@@ -417,6 +345,8 @@ impl<R: BufRead, W: Write> Visitor for Interpreter<R, W> {
     }
 
     fn visit_block(&mut self, block: Vec<Decl>) -> Self::Value {
+        let current_env = self.env.clone();
+
         self.env = Env::from_outer(self.env.clone());
 
         let result = block
@@ -425,7 +355,7 @@ impl<R: BufRead, W: Write> Visitor for Interpreter<R, W> {
             .last()
             .unwrap_or(Ok(LoxValue::Nil));
 
-        self.env = *self.env.outer.clone().unwrap();
+        self.env = current_env.to_owned();
 
         result
     }
@@ -581,10 +511,8 @@ impl<R: BufRead, W: Write> Visitor for Interpreter<R, W> {
             name: name.clone(),
             parameters: parameters.into_iter().map(|i| i.name).collect(),
             body,
-            closure: closure.clone(),
+            closure,
         });
-
-        println!("closure for {:?}: {:?}", name, closure);
 
         self.env.define(name, func);
 
