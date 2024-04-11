@@ -2,6 +2,8 @@ use std::{cell::RefCell, collections::HashMap, rc::Rc};
 
 use super::{Callable, EvalError, LoxValue};
 
+pub type RefEnv = Rc<RefCell<Env>>;
+
 #[derive(Debug, Clone, PartialEq)]
 pub(super) struct Env {
     pub(super) outer: Option<Rc<RefCell<Env>>>,
@@ -41,7 +43,7 @@ impl Env {
             Ok(())
         } else {
             match self.outer {
-                Some(ref outer) => outer.borrow_mut().assign(name, value),
+                Some(ref outer) => outer.assign(name, value),
                 None => Err(EvalError::UndefinedVariable(name)),
             }
         }
@@ -54,33 +56,16 @@ impl Env {
             .get(&name)
             .cloned()
             .or_else(|| match &self.outer {
-                Some(ref outer) => outer.borrow_mut().get(name),
+                Some(ref outer) => outer.get(name),
                 None => None,
             })
     }
 
     pub fn from_outer(outer: Env) -> Env {
         Env {
-            outer: Some(Rc::new(RefCell::new(outer))),
+            outer: Some(Box::new(outer)),
             values: HashMap::new(),
         }
-    }
-
-    pub fn push(mut self) {
-        self.outer = Some(Rc::new(RefCell::new(self.clone())));
-        self.values = HashMap::new();
-    }
-
-    pub fn pop(mut self) {
-        self.values = self
-            .outer
-            .clone()
-            .map(|o| o.borrow_mut().values.clone())
-            .unwrap_or(HashMap::new());
-        self.outer = match self.outer {
-            Some(outer) => outer.borrow_mut().outer.clone(),
-            None => None,
-        };
     }
 
     fn new() -> Self {

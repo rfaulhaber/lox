@@ -4,11 +4,13 @@ use env::Env;
 use thiserror::Error;
 
 use std::{
-    borrow::Borrow,
+    borrow::{Borrow, BorrowMut},
+    cell::RefCell,
     cmp::Ordering,
     fmt::{Display, Write},
     io::BufRead,
     ops::{Add, Div, Mul, Sub},
+    rc::Rc,
 };
 
 use crate::parser::ast::{
@@ -181,7 +183,7 @@ enum Callable {
         name: String,
         parameters: Vec<String>,
         body: Stmt,
-        closure: Env,
+        closure: Rc<RefCell<Env>>,
     },
 }
 
@@ -209,7 +211,7 @@ where
 {
     reader: R,
     writer: W,
-    env: Env,
+    env: Rc<RefCell<Env>>,
 }
 
 impl<R: BufRead, W: Write> Interpreter<R, W> {
@@ -217,7 +219,7 @@ impl<R: BufRead, W: Write> Interpreter<R, W> {
         Self {
             reader,
             writer,
-            env: Env::new_with_builtins(),
+            env: Rc::new(RefCell::new(Env::new_with_builtins())),
         }
     }
 
@@ -227,6 +229,36 @@ impl<R: BufRead, W: Write> Interpreter<R, W> {
 
     pub fn get_output(&mut self) -> &W {
         self.writer.borrow()
+    }
+
+    /// Sets the current env to the outer value
+    fn push_env(&mut self) {
+        let new_env = Rc::new(RefCell::new(Env::from_outer(self.env.into_inner())));
+
+        self.env = new_env;
+    }
+
+    /// Sets the current env to be the current env outer value
+    fn pop_env(&mut self) {
+        self.env = Rc::new(RefCell::new(
+            (*self.env)
+                .borrow_mut()
+                .outer
+                .map(|e| *e)
+                .unwrap_or(Env::new_with_builtins()),
+        ));
+    }
+
+    fn env_define<S: ToString>(&mut self, name: S, value: LoxValue) {
+        (*self.env).borrow_mut().define(name, value);
+    }
+
+    fn env_assign<S: ToString>(&mut self, name: S, value: LoxValue) -> Result<(), EvalError> {
+        (*self.env).borrow_mut().assign(name, value)
+    }
+
+    fn env_get<S: ToString>(&mut self, name: S) -> Option<LoxValue> {
+        (*self.env).borrow_mut().get(name)
     }
 
     fn call(&mut self, callable: Callable, args: Vec<LoxValue>) -> EvalResult {
@@ -254,7 +286,7 @@ impl<R: BufRead, W: Write> Interpreter<R, W> {
                     .into_iter()
                     .zip(args.into_iter())
                     .for_each(|(parameter, arg)| {
-                        self.env.define(parameter, arg);
+                        self.env_define(parameter, arg);
                     });
 
                 let result = match body {
@@ -262,7 +294,7 @@ impl<R: BufRead, W: Write> Interpreter<R, W> {
                     _ => unreachable!("didn't get a block"),
                 };
 
-                self.env = self.env.outer.clone().unwrap().borrow_mut().clone();
+                self.env = current_env;
 
                 result
             }
@@ -325,7 +357,7 @@ impl<R: BufRead, W: Write> Visitor for Interpreter<R, W> {
             Decl::Var(id, expr) => match expr {
                 Some(expr) => match self.visit_expr(expr) {
                     Ok(value) => {
-                        self.env.define(id.name, value.clone());
+                        self.env_define(id.name, value.clone());
                         Ok(value)
                     }
                     Err(err) => {
@@ -333,7 +365,7 @@ impl<R: BufRead, W: Write> Visitor for Interpreter<R, W> {
                     }
                 },
                 None => {
-                    self.env.define(id.name, LoxValue::Nil);
+                    self.env_define(id.name, LoxValue::Nil);
                     Ok(LoxValue::Nil)
                 }
             },
@@ -345,7 +377,7 @@ impl<R: BufRead, W: Write> Visitor for Interpreter<R, W> {
     }
 
     fn visit_block(&mut self, block: Vec<Decl>) -> Self::Value {
-        self.env = Env::from_outer(self.env.clone());
+        self.push_env();
 
         let result = block
             .into_iter()
@@ -353,7 +385,7 @@ impl<R: BufRead, W: Write> Visitor for Interpreter<R, W> {
             .last()
             .unwrap_or(Ok(LoxValue::Nil));
 
-        self.env = self.env.outer.clone().unwrap().borrow_mut().clone();
+        self.pop_env();
 
         result
     }
@@ -378,7 +410,6 @@ impl<R: BufRead, W: Write> Visitor for Interpreter<R, W> {
         println!("visiting while");
         loop {
             let expr = self.visit_expr(cond.clone());
-            println!("expr: {:?} {:?} i: {:?}", expr, cond, self.env.get("a"));
             match expr {
                 Ok(val) => {
                     if is_truthy(val) == LoxValue::Bool(true) {
@@ -403,8 +434,7 @@ impl<R: BufRead, W: Write> Visitor for Interpreter<R, W> {
             Expr::Binary(lhs, op, rhs) => self.visit_binary_expr(*lhs, op, *rhs),
             Expr::Grouping(expr) => self.visit_grouping_expr(*expr),
             Expr::Var(var) => self
-                .env
-                .get(var.name.clone())
+                .env_get(var.name.clone())
                 .ok_or_else(|| EvalError::UndefinedVariable(var.name)),
             Expr::Assignment(id, expr) => self.visit_assignment_expr(id, *expr),
             Expr::Logical(left, op, right) => self.visit_logical_expr(*left, op, *right),
@@ -464,7 +494,7 @@ impl<R: BufRead, W: Write> Visitor for Interpreter<R, W> {
 
     fn visit_assignment_expr(&mut self, id: Identifier, expr: Expr) -> Self::Value {
         let value = self.visit_expr(expr)?;
-        self.env.assign(id.name, value.clone())?;
+        self.env_assign(id.name, value.clone())?;
 
         Ok(value)
     }
@@ -505,7 +535,7 @@ impl<R: BufRead, W: Write> Visitor for Interpreter<R, W> {
     ) -> Self::Value {
         let name = name.name;
 
-        let closure = Env::from_outer(self.env.clone());
+        let closure = Rc::new(RefCell::new(Env::from_outer(self.env.into_inner())));
 
         let func = LoxValue::Callable(Callable::Function {
             name: name.clone(),
@@ -514,7 +544,7 @@ impl<R: BufRead, W: Write> Visitor for Interpreter<R, W> {
             closure,
         });
 
-        self.env.define(name, func);
+        self.env_define(name, func);
 
         Ok(LoxValue::Nil)
     }
