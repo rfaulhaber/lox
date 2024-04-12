@@ -231,24 +231,6 @@ impl<R: BufRead, W: Write> Interpreter<R, W> {
         self.writer.borrow()
     }
 
-    /// Sets the current env to the outer value
-    fn push_env(&mut self) {
-        let new_env = Rc::new(RefCell::new(Env::from_outer(self.env.into_inner())));
-
-        self.env = new_env;
-    }
-
-    /// Sets the current env to be the current env outer value
-    fn pop_env(&mut self) {
-        self.env = Rc::new(RefCell::new(
-            (*self.env)
-                .borrow_mut()
-                .outer
-                .map(|e| *e)
-                .unwrap_or(Env::new_with_builtins()),
-        ));
-    }
-
     fn env_define<S: ToString>(&mut self, name: S, value: LoxValue) {
         (*self.env).borrow_mut().define(name, value);
     }
@@ -377,7 +359,9 @@ impl<R: BufRead, W: Write> Visitor for Interpreter<R, W> {
     }
 
     fn visit_block(&mut self, block: Vec<Decl>) -> Self::Value {
-        self.push_env();
+        let current_env = self.env.clone();
+
+        self.env = Env::from_outer(current_env.clone());
 
         let result = block
             .into_iter()
@@ -385,7 +369,7 @@ impl<R: BufRead, W: Write> Visitor for Interpreter<R, W> {
             .last()
             .unwrap_or(Ok(LoxValue::Nil));
 
-        self.pop_env();
+        self.env = current_env;
 
         result
     }
@@ -535,7 +519,7 @@ impl<R: BufRead, W: Write> Visitor for Interpreter<R, W> {
     ) -> Self::Value {
         let name = name.name;
 
-        let closure = Rc::new(RefCell::new(Env::from_outer(self.env.into_inner())));
+        let closure = self.env.clone();
 
         let func = LoxValue::Callable(Callable::Function {
             name: name.clone(),
