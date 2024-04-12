@@ -1,0 +1,8 @@
+fun test(n) {
+    if (n <= 1) return n;
+    return n + 10;
+}
+
+for (var i = 0; i < 5; i = i + 1) {
+    print test(i);
+}

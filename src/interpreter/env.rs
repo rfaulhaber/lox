@@ -6,8 +6,8 @@ pub type RefEnv = Rc<RefCell<Env>>;
 
 #[derive(Debug, Clone, PartialEq)]
 pub(super) struct Env {
-    outer: Option<RefEnv>,
-    values: HashMap<String, LoxValue>,
+    pub(super) outer: Option<RefEnv>,
+    pub(super) values: HashMap<String, LoxValue>,
 }
 
 impl Env {
@@ -73,5 +73,25 @@ impl Env {
             outer: None,
             values: HashMap::new(),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn environments_correctly_update() {
+        let env = Rc::new(RefCell::new(Env::new_with_builtins()));
+
+        env.borrow_mut().define("n", LoxValue::Int(0));
+
+        let inner = Env::from_outer(env.clone());
+
+        inner.borrow_mut().define("n", LoxValue::Int(1));
+        let _ = inner.borrow_mut().assign("n", LoxValue::Int(2));
+
+        assert_eq!(inner.borrow_mut().get("n").unwrap(), LoxValue::Int(2));
+        assert_eq!(env.borrow_mut().get("n").unwrap(), LoxValue::Int(0));
     }
 }

@@ -4,9 +4,10 @@ use env::Env;
 use thiserror::Error;
 
 use std::{
-    borrow::{Borrow, BorrowMut},
+    borrow::Borrow,
     cell::RefCell,
     cmp::Ordering,
+    collections::HashMap,
     fmt::{Display, Write},
     io::BufRead,
     ops::{Add, Div, Mul, Sub},
@@ -261,8 +262,14 @@ impl<R: BufRead, W: Write> Interpreter<R, W> {
                 }
 
                 let current_env = self.env.clone();
+                println!(
+                    "n: {:?}, args: {:?}",
+                    current_env.borrow_mut().values.get("n"),
+                    args
+                );
 
                 self.env = closure;
+                println!("closure n: {:?}", self.env.borrow_mut());
 
                 parameters
                     .into_iter()
@@ -277,6 +284,7 @@ impl<R: BufRead, W: Write> Interpreter<R, W> {
                 };
 
                 self.env = current_env;
+                println!("n after: {:?}", self.env.borrow_mut().values.get("n"));
 
                 result
             }
@@ -321,6 +329,7 @@ impl<R: BufRead, W: Write> Visitor for Interpreter<R, W> {
                     Err(ref e) => format!("{}", e),
                 };
 
+                println!("printing");
                 writeln!(self.writer, "{}", output).unwrap();
 
                 Ok(LoxValue::Nil)
@@ -391,7 +400,6 @@ impl<R: BufRead, W: Write> Visitor for Interpreter<R, W> {
     }
 
     fn visit_while_stmt(&mut self, cond: Expr, body: Stmt) -> Self::Value {
-        println!("visiting while");
         loop {
             let expr = self.visit_expr(cond.clone());
             match expr {
