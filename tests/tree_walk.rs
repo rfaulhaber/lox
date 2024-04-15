@@ -1,5 +1,6 @@
 mod tests;
 
+use pretty_assertions::assert_eq;
 use tests::TestCase;
 
 macro_rules! make_test {

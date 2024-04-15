@@ -68,6 +68,13 @@ impl Env {
         }))
     }
 
+    pub fn retrieve_inner(env: RefEnv) -> Env {
+        Env {
+            outer: env.borrow().outer.clone(),
+            values: env.borrow().values.clone(),
+        }
+    }
+
     fn new() -> Self {
         Self {
             outer: None,
@@ -93,5 +100,22 @@ mod tests {
 
         assert_eq!(inner.borrow_mut().get("n").unwrap(), LoxValue::Int(2));
         assert_eq!(env.borrow_mut().get("n").unwrap(), LoxValue::Int(0));
+    }
+
+    #[test]
+    fn retrieve_inner() {
+        let env = Rc::new(RefCell::new(Env::new_with_builtins()));
+
+        env.borrow_mut().define("n", LoxValue::Int(0));
+
+        let mut inner = Env::retrieve_inner(env.clone());
+
+        assert_eq!(inner.get("n"), env.borrow_mut().get("n"));
+
+        let inner_ref = Rc::new(RefCell::new(inner));
+
+        inner_ref.borrow_mut().assign("n", LoxValue::Int(2));
+
+        assert_ne!(inner_ref.borrow_mut().get("n"), env.borrow_mut().get("n"));
     }
 }
