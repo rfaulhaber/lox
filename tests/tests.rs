@@ -1,6 +1,52 @@
 use anyhow::Result;
 use lox::{interpreter::Interpreter, parser::ast::program::Program, parser::Parser};
 
+#[macro_export]
+macro_rules! make_interpreter_test {
+    ($name:ident) => {
+        #[test]
+        fn $name() {
+            let test_case = TestCase::new(stringify!($name)).unwrap();
+
+            let TestCase {
+                mut interpreter,
+                ast,
+                expected,
+                ..
+            } = test_case;
+
+            let result = interpreter.eval(ast);
+
+            assert!(result.is_ok(), "received err result: {:?}", result);
+
+            let output = interpreter.get_output();
+
+            assert_eq!(*output, expected);
+        }
+    };
+
+    ($name:ident, $override:expr) => {
+        #[test]
+        fn $name() {
+            let test_case = TestCase::new(stringify!($name)).unwrap();
+
+            let TestCase {
+                mut interpreter,
+                ast,
+                ..
+            } = test_case;
+
+            let result = interpreter.eval(ast);
+
+            assert!(result.is_ok());
+
+            let output = interpreter.get_output();
+
+            $override(output);
+        }
+    };
+}
+
 pub struct TestCase<'t> {
     pub name: String,
     pub code: String,

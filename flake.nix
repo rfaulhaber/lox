@@ -1,4 +1,3 @@
-# barebones Rust project template with Nix flakes
 {
   description = "lox";
   inputs = {
@@ -12,7 +11,9 @@
     flake-utils,
   }:
     flake-utils.lib.eachDefaultSystem (system: let
-      pkgs = nixpkgs.legacyPackages.${system};
+      pkgs = import nixpkgs {
+        inherit system;
+      };
       projectName = "lox";
     in rec {
       packages.${projectName} = pkgs.rustPlatform.buildRustPackage {
@@ -38,11 +39,13 @@
           rust-analyzer
           rustup
 
+          gdb
+        ];
+
+        nativeBuildInputs = with pkgs; [
           # needed for cargo
           # solves the "missing -liconv" issue
           libiconv
-
-          gdb
         ];
       };
     });

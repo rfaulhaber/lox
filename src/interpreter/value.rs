@@ -3,7 +3,6 @@ use std::{
     cmp::Ordering,
     fmt::Display,
     ops::{Add, Div, Mul, Sub},
-    rc::Rc,
 };
 
 use crate::parser::ast::stmt::Stmt;

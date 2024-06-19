@@ -1,63 +1,17 @@
 mod tests;
 
-use pretty_assertions::assert_eq;
-use tests::TestCase;
+use crate::tests::TestCase;
 
-macro_rules! make_test {
-    ($name:ident) => {
-        #[test]
-        fn $name() {
-            let test_case = TestCase::new(stringify!($name)).unwrap();
-
-            let TestCase {
-                mut interpreter,
-                ast,
-                expected,
-                ..
-            } = test_case;
-
-            let result = interpreter.eval(ast);
-
-            assert!(result.is_ok(), "received err result: {:?}", result);
-
-            let output = interpreter.get_output();
-
-            assert_eq!(*output, expected);
-        }
-    };
-
-    ($name:ident, $override:expr) => {
-        #[test]
-        fn $name() {
-            let test_case = TestCase::new(stringify!($name)).unwrap();
-
-            let TestCase {
-                mut interpreter,
-                ast,
-                ..
-            } = test_case;
-
-            let result = interpreter.eval(ast);
-
-            assert!(result.is_ok());
-
-            let output = interpreter.get_output();
-
-            $override(output);
-        }
-    };
-}
-
-make_test!(assignments);
-make_test!(basic_statements);
-make_test!(reassignment);
-make_test!(scope);
-make_test!(if_true);
-make_test!(if_false);
-make_test!(basic_logic);
-make_test!(basic_while);
-make_test!(for_loop);
-make_test!(builtin_call, |output: &String| {
+make_interpreter_test!(assignments);
+make_interpreter_test!(basic_statements);
+make_interpreter_test!(reassignment);
+make_interpreter_test!(scope);
+make_interpreter_test!(if_true);
+make_interpreter_test!(if_false);
+make_interpreter_test!(basic_logic);
+make_interpreter_test!(basic_while);
+make_interpreter_test!(for_loop);
+make_interpreter_test!(builtin_call, |output: &String| {
     let current_time = chrono::offset::Local::now().timestamp_millis();
     let received_time = output.trim().parse::<i64>();
 
@@ -67,12 +21,13 @@ make_test!(builtin_call, |output: &String| {
 
     assert!(
         diff < 10, // idk, arbitrary
-        "Recieved large diff between current time and parsed time: {}",
+        "Received large diff between current time and parsed time: {}",
         diff
     );
 });
-make_test!(basic_function_call);
-make_test!(return_stmt_basic);
-make_test!(return_stmt);
-make_test!(closures);
-make_test!(scope_update);
+make_interpreter_test!(basic_function_call);
+make_interpreter_test!(return_stmt_basic);
+make_interpreter_test!(return_stmt);
+make_interpreter_test!(closures);
+make_interpreter_test!(scope_update);
+make_interpreter_test!(resolving_and_binding);
