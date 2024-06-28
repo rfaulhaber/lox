@@ -14,18 +14,14 @@ impl Env {
     pub fn new_with_builtins() -> Self {
         let mut env = Env::new();
 
-        env.define(
-            "clock",
-            LoxValue::Callable(Callable::Native {
-                name: "clock".into(),
-                arity: 0,
-                func: |_args: Vec<LoxValue>| {
-                    Ok(LoxValue::Int(
-                        chrono::offset::Local::now().timestamp_millis(),
-                    ))
-                },
-            }),
-        );
+        for builtin_fn in builtins() {
+            match builtin_fn.clone() {
+                Callable::Native { ref name, .. } => {
+                    env.define(name, LoxValue::Callable(builtin_fn))
+                }
+                _ => unreachable!("non-native function defined"),
+            }
+        }
 
         env
     }
@@ -81,6 +77,18 @@ impl Env {
             values: HashMap::new(),
         }
     }
+}
+
+fn builtins() -> [Callable; 1] {
+    [Callable::Native {
+        name: String::from("clock"),
+        arity: 0,
+        func: |_args: Vec<LoxValue>| {
+            Ok(LoxValue::Int(
+                chrono::offset::Local::now().timestamp_millis(),
+            ))
+        },
+    }]
 }
 
 #[cfg(test)]
