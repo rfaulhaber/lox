@@ -1,5 +1,6 @@
 use anyhow::Result;
-use lox::{interpreter::Interpreter, parser::ast::program::Program, parser::Parser};
+use lox::interpreter::Interpreter;
+use lox::{parser::ast::program::Program, parser::Parser};
 
 #[macro_export]
 macro_rules! make_interpreter_test {

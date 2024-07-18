@@ -11,8 +11,22 @@
     flake-utils,
   }:
     flake-utils.lib.eachDefaultSystem (system: let
+      # NOTE: this is temporary due to the fact that the canonical tests depend on the last stable version of dart
+      dartOverlay = final: prev: {
+        dart2 =
+          final.dart.override {
+            version = "2.19.6";
+            sources = {
+              "2.19.6-x86_64-linux" = builtins.fetchurl {
+                url = "https://storage.googleapis.com/dart-archive/channels/stable/release/2.19.6/sdk/dartsdk-linux-x64-release.zip";
+                sha256 = "sha256:0kvhvwd2q8s7mnjgvhl6gr3y73agcd0y79sm844xd8ybd9gg5pqg";
+              };
+            };
+          };
+      };
       pkgs = import nixpkgs {
         inherit system;
+        overlays = [dartOverlay];
       };
       projectName = "lox";
     in rec {
@@ -40,6 +54,11 @@
           rustup
 
           gdb
+
+          # for canonical tests
+          zulu
+          clang
+          dart2
         ];
 
         nativeBuildInputs = with pkgs; [

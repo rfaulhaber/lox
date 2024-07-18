@@ -1,7 +1,7 @@
 use std::{collections::HashMap, fmt::Write, io::BufRead};
 
 use crate::{
-    interpreter::{EvalResult, Interpreter},
+    interpreter::{error::EvalError, interpreter::Interpreter},
     parser::ast::{
         decl::Decl,
         expr::{BinaryOperator, Expr, Identifier, Literal, LogicalOperator, UnaryOperator},
@@ -11,6 +11,8 @@ use crate::{
     },
 };
 
+pub type ResolutionResult = Result<(), EvalError>;
+
 trait Resolvable: Sized {}
 
 enum ResolveState {
@@ -19,7 +21,7 @@ enum ResolveState {
 }
 
 impl ResolveState {
-    pub fn is_resolved(self) {
+    pub fn is_resolved(self) -> bool {
         match self {
             ResolveState::Resolved => true,
             ResolveState::Unresolved => false,
@@ -45,36 +47,52 @@ impl<R: BufRead, W: Write> Resolver<R, W> {
         let _ = self.scopes.pop();
     }
 
-    fn define(&mut self, name: dyn ToString) {
+    fn define(&mut self, name: impl ToString) -> Option<ResolveState> {
         self.scopes
             .last_mut()
             .and_then(|last| last.insert(name.to_string(), ResolveState::Resolved))
     }
 
-    fn declare(&mut self, name: dyn ToString) {
+    fn declare(&mut self, name: impl ToString) -> Option<ResolveState> {
         self.scopes
             .last_mut()
             .and_then(|last| last.insert(name.to_string(), ResolveState::Unresolved))
     }
 
-    fn resolve_local(&mut self, expr: Expr, name: dyn ToString) {
+    fn resolve_local(&mut self, expr: Expr, name: impl ToString) {
         self.scopes
             .iter()
             .enumerate()
             .rev()
             .for_each(|(level, scope)| {
-                if scope.contains_key(name.into()) {
-                    self.interpreter.resolve(expr, level - 1)
+                if scope.contains_key(&name.to_string()) {
+                    self.interpreter.resolve_expr(expr.clone(), level - 1)
                 }
             });
     }
 }
 
 impl<R: BufRead, W: Write> Visitor for Resolver<R, W> {
-    type Value = ();
+    type Value = ResolutionResult;
 
     fn visit_expr(&mut self, expr: Expr) -> Self::Value {
-        todo!()
+        match expr.clone() {
+            Expr::Literal(_) => todo!(),
+            Expr::Unary(_, _) => todo!(),
+            Expr::Call(_, _) => todo!(),
+            Expr::Binary(_, _, _) => todo!(),
+            Expr::Logical(_, _, _) => todo!(),
+            Expr::Grouping(_) => todo!(),
+            Expr::Var(id) => match self.scopes.last().and_then(|last| last.get(&id.name)) {
+                Some(ResolveState::Resolved) => {
+                    self.resolve_local(expr, id.name);
+                    Ok(())
+                }
+                Some(ResolveState::Unresolved) => todo!("throw error"),
+                None => todo!(),
+            },
+            Expr::Assignment(_, _) => todo!(),
+        }
     }
 
     fn visit_unary_expr(&mut self, op: UnaryOperator, expr: Expr) -> Self::Value {
@@ -112,13 +130,14 @@ impl<R: BufRead, W: Write> Visitor for Resolver<R, W> {
     fn visit_declaration(&mut self, decl: Decl) -> Self::Value {
         match decl {
             Decl::Var(id, expr) => {
-                self.declare(id);
+                self.declare(id.name.clone());
 
-                if expr.is_some() {
+                if let Some(expr) = expr {
                     self.visit_expr(expr);
                 }
 
-                self.define(id);
+                self.define(id.name);
+                Ok(())
             }
             Decl::Func(_, _, _) => todo!(),
             Decl::Stmt(_) => todo!(),
@@ -131,10 +150,12 @@ impl<R: BufRead, W: Write> Visitor for Resolver<R, W> {
 
     fn visit_block(&mut self, block: Vec<Decl>) -> Self::Value {
         self.begin_scope();
-        block
+        let res = block
             .into_iter()
-            .for_each(|d| self.visit_declaration(d.to_owned()));
+            .try_for_each(|d| self.visit_declaration(d.to_owned()));
         self.end_scope();
+
+        res
     }
 
     fn visit_if_stmt(&mut self, cond: Expr, stmt: Stmt, else_stmt: Option<Stmt>) -> Self::Value {

@@ -1,8 +1,10 @@
 use std::{cell::RefCell, collections::HashMap, rc::Rc};
 
-use super::{Callable, EvalError, LoxValue};
+use crate::interpreter::value::Callable;
 
-pub type RefEnv = Rc<RefCell<Env>>;
+use super::{EvalError, LoxValue};
+
+pub(super) type RefEnv = Rc<RefCell<Env>>;
 
 #[derive(Debug, Clone, PartialEq)]
 pub(super) struct Env {
