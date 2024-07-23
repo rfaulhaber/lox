@@ -5,11 +5,11 @@ use crate::interpreter::value::Callable;
 use super::{EvalError, LoxValue};
 
 pub(super) type RefEnv = Rc<RefCell<Env>>;
+pub(super) type Scope = HashMap<String, LoxValue>;
 
 #[derive(Debug, Clone, PartialEq)]
 pub(super) struct Env {
-    pub(super) outer: Option<RefEnv>,
-    pub(super) values: HashMap<String, LoxValue>,
+    pub(super) scopes: Vec<Scope>,
 }
 
 impl Env {
@@ -29,19 +29,33 @@ impl Env {
     }
 
     pub fn define<S: ToString>(&mut self, name: S, value: LoxValue) {
-        self.values.insert(name.to_string(), value);
+        self.scopes
+            .last_mut()
+            .unwrap()
+            .insert(name.to_string(), value);
     }
 
     pub fn assign<S: ToString>(&mut self, name: S, value: LoxValue) -> Result<(), EvalError> {
         let name = name.to_string();
+        let last = self.scopes.last_mut().unwrap();
 
-        if self.values.contains_key(&name) {
-            self.values.insert(name, value.clone());
+        if last.contains_key(&name) {
+            last.insert(name, value.clone());
 
             Ok(())
         } else {
-            match self.outer {
-                Some(ref outer) => outer.borrow_mut().assign(name, value),
+            match self
+                .scopes
+                .iter_mut()
+                .rev()
+                .skip(1)
+                .find(|scope| scope.contains_key(&name))
+            {
+                Some(scope) => {
+                    scope.insert(name, value.clone());
+
+                    Ok(())
+                }
                 None => Err(EvalError::UndefinedVariable(name)),
             }
         }
@@ -50,33 +64,38 @@ impl Env {
     pub fn get<S: ToString>(&mut self, name: S) -> Option<LoxValue> {
         let name = name.to_string();
 
-        self.values
-            .get(&name)
-            .cloned()
-            .or_else(|| match &self.outer {
-                Some(ref outer) => outer.borrow_mut().get(name),
-                None => None,
-            })
+        self.scopes
+            .iter()
+            .rev()
+            .find_map(|scope| scope.get(&name).cloned())
     }
 
-    pub fn from_outer(outer: RefEnv) -> RefEnv {
-        Rc::new(RefCell::new(Env {
-            outer: Some(outer),
-            values: HashMap::new(),
-        }))
-    }
+    pub fn push_scope(&mut self) -> Env {
+        self.scopes.push(HashMap::new());
 
-    pub fn retrieve_inner(env: RefEnv) -> Env {
         Env {
-            outer: env.borrow().outer.clone(),
-            values: env.borrow().values.clone(),
+            scopes: self.scopes.clone(),
         }
+    }
+
+    pub fn pop_scope(&mut self) -> Env {
+        self.scopes.pop();
+
+        Env {
+            scopes: self.scopes.clone(),
+        }
+    }
+
+    pub fn from_existing(env: Env) -> Env {
+        let mut scopes = env.scopes.clone();
+        scopes.push(HashMap::new());
+
+        Env { scopes }
     }
 
     fn new() -> Self {
         Self {
-            outer: None,
-            values: HashMap::new(),
+            scopes: vec![HashMap::new()],
         }
     }
 }
@@ -98,34 +117,57 @@ mod tests {
     use super::*;
 
     #[test]
-    fn environments_correctly_update() {
-        let env = Rc::new(RefCell::new(Env::new_with_builtins()));
+    fn define() {
+        let mut env = Env::new_with_builtins();
 
-        env.borrow_mut().define("n", LoxValue::Int(0));
+        env.define("n", LoxValue::Int(2));
 
-        let inner = Env::from_outer(env.clone());
-
-        inner.borrow_mut().define("n", LoxValue::Int(1));
-        let _ = inner.borrow_mut().assign("n", LoxValue::Int(2));
-
-        assert_eq!(inner.borrow_mut().get("n").unwrap(), LoxValue::Int(2));
-        assert_eq!(env.borrow_mut().get("n").unwrap(), LoxValue::Int(0));
+        assert_eq!(env.get("n"), Some(LoxValue::Int(2)));
     }
 
     #[test]
-    fn retrieve_inner() {
-        let env = Rc::new(RefCell::new(Env::new_with_builtins()));
+    fn assign() {
+        let mut env = Env::new_with_builtins();
 
-        env.borrow_mut().define("n", LoxValue::Int(0));
+        env.define("n", LoxValue::Int(2));
 
-        let mut inner = Env::retrieve_inner(env.clone());
+        assert_eq!(env.get("n"), Some(LoxValue::Int(2)));
 
-        assert_eq!(inner.get("n"), env.borrow_mut().get("n"));
+        env.assign("n", LoxValue::Int(3));
 
-        let inner_ref = Rc::new(RefCell::new(inner));
+        assert_eq!(env.get("n"), Some(LoxValue::Int(3)));
+    }
 
-        inner_ref.borrow_mut().assign("n", LoxValue::Int(2));
+    #[test]
+    fn depth() {
+        let mut env = Env::new_with_builtins();
 
-        assert_ne!(inner_ref.borrow_mut().get("n"), env.borrow_mut().get("n"));
+        env.define("a", LoxValue::Int(2));
+
+        env.push_scope();
+
+        env.define("b", LoxValue::Int(3));
+
+        env.push_scope();
+
+        env.define("c", LoxValue::Int(4));
+
+        assert_eq!(env.get("a"), Some(LoxValue::Int(2)));
+        assert_eq!(env.get("b"), Some(LoxValue::Int(3)));
+        assert_eq!(env.get("c"), Some(LoxValue::Int(4)));
+        assert_eq!(env.get("d"), None);
+    }
+
+    #[test]
+    fn scopes() {
+        let mut env = Env::new_with_builtins();
+
+        env.define("n", LoxValue::Int(2));
+
+        env.push_scope();
+
+        env.define("n", LoxValue::Int(3));
+
+        assert_eq!(env.get("n"), Some(LoxValue::Int(3)));
     }
 }

@@ -11,6 +11,7 @@ use crate::parser::ast::{
     visitor::Visitor,
 };
 
+use super::env::RefEnv;
 use super::{
     env::Env,
     error::EvalError,
@@ -27,6 +28,7 @@ where
     reader: R,
     writer: W,
     env: Rc<RefCell<Env>>,
+    locals: HashMap<Expr, usize>,
 }
 
 impl<R: BufRead, W: Write> Interpreter<R, W> {
@@ -35,6 +37,7 @@ impl<R: BufRead, W: Write> Interpreter<R, W> {
             reader,
             writer,
             env: Rc::new(RefCell::new(Env::new_with_builtins())),
+            locals: HashMap::new(),
         }
     }
 
@@ -61,6 +64,10 @@ impl<R: BufRead, W: Write> Interpreter<R, W> {
     fn env_get<S: ToString>(&mut self, name: S) -> Option<LoxValue> {
         (*self.env).borrow_mut().get(name)
     }
+
+    // fn env_get_at<S: ToString>(&mut self, dist: usize, name: S) -> Option<LoxValue> {
+    //     todo!()
+    // }
 
     fn call(&mut self, callable: Callable, args: Vec<LoxValue>) -> EvalResult {
         match callable {
@@ -114,6 +121,10 @@ impl<R: BufRead, W: Write> Interpreter<R, W> {
         }
 
         result
+    }
+
+    fn look_up_variable<S: ToString>(&mut self, id: S, expr: Expr) -> EvalResult {
+        todo!();
     }
 }
 
@@ -176,9 +187,7 @@ impl<R: BufRead, W: Write> Visitor for Interpreter<R, W> {
     }
 
     fn visit_block(&mut self, block: Vec<Decl>) -> Self::Value {
-        let current_env = self.env.clone();
-
-        self.env = Env::from_outer(current_env.clone());
+        let _ = self.env.borrow_mut().push_scope();
 
         let result = block
             .into_iter()
@@ -186,7 +195,7 @@ impl<R: BufRead, W: Write> Visitor for Interpreter<R, W> {
             .last()
             .unwrap_or(Ok(LoxValue::Nil));
 
-        self.env = current_env;
+        let _ = self.env.borrow_mut().pop_scope();
 
         result
     }
@@ -228,11 +237,12 @@ impl<R: BufRead, W: Write> Visitor for Interpreter<R, W> {
     }
 
     fn visit_expr(&mut self, expr: Expr) -> Self::Value {
-        match expr {
+        match expr.clone() {
             Expr::Literal(l) => self.visit_literal(l),
             Expr::Unary(op, rhs) => self.visit_unary_expr(op, *rhs),
             Expr::Binary(lhs, op, rhs) => self.visit_binary_expr(*lhs, op, *rhs),
             Expr::Grouping(expr) => self.visit_grouping_expr(*expr),
+            // Expr::Var(var) => self.look_up_variable(var.name, expr),
             Expr::Var(var) => self
                 .env_get(var.name.clone())
                 .ok_or_else(|| EvalError::UndefinedVariable(var.name)),
@@ -333,18 +343,13 @@ impl<R: BufRead, W: Write> Visitor for Interpreter<R, W> {
         parameters: Vec<Identifier>,
         body: Stmt,
     ) -> Self::Value {
-        let name = name.name;
-
-        let closure = RefCell::new(Env {
-            outer: Some(self.env.clone()),
-            values: HashMap::new(),
-        });
+        let Identifier { name } = name;
 
         let func = LoxValue::Callable(Callable::Function {
             name: name.clone(),
             parameters: parameters.into_iter().map(|i| i.name).collect(),
             body,
-            closure,
+            closure: RefCell::new(Env::from_existing(self.env.borrow_mut().clone())),
         });
 
         self.env_define(name, func);
@@ -440,5 +445,28 @@ mod tests {
         assert!(matches!(result, Ok(LoxValue::Nil)));
 
         assert_eq!(writer.trim(), "\"hello world\"");
+    }
+
+    #[test]
+    fn capture_env() {
+        let ast = Parser::new(Lexer::new(
+            std::str::from_utf8(b"var test = \"hello\" + \" \" + \"world\";\nprint test;").unwrap(),
+        ))
+        .parse()
+        .unwrap();
+
+        let mock_reader = Box::new(&b""[..]);
+
+        let mut writer = String::new();
+
+        let mut interpreter = Interpreter::new(mock_reader, &mut writer);
+
+        interpreter.env_define("n", LoxValue::Int(123));
+
+        let mut captured_env = interpreter.env.borrow_mut().clone();
+
+        captured_env.assign("n", LoxValue::Int(456));
+
+        assert_ne!(interpreter.env.borrow_mut().get("n"), captured_env.get("n"));
     }
 }

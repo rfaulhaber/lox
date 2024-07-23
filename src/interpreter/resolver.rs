@@ -77,54 +77,78 @@ impl<R: BufRead, W: Write> Visitor for Resolver<R, W> {
 
     fn visit_expr(&mut self, expr: Expr) -> Self::Value {
         match expr.clone() {
-            Expr::Literal(_) => todo!(),
-            Expr::Unary(_, _) => todo!(),
-            Expr::Call(_, _) => todo!(),
-            Expr::Binary(_, _, _) => todo!(),
-            Expr::Logical(_, _, _) => todo!(),
-            Expr::Grouping(_) => todo!(),
+            Expr::Literal(lit) => self.visit_literal(lit),
+            Expr::Unary(op, expr) => self.visit_unary_expr(op, *expr),
+            Expr::Call(callee, arguments) => self.visit_call_expr(*callee, arguments),
+            Expr::Binary(left, op, right) => self.visit_binary_expr(*left, op, *right),
+            Expr::Logical(left, op, right) => self.visit_logical_expr(*left, op, *right),
+            Expr::Grouping(expr) => self.visit_grouping_expr(*expr),
             Expr::Var(id) => match self.scopes.last().and_then(|last| last.get(&id.name)) {
                 Some(ResolveState::Resolved) => {
                     self.resolve_local(expr, id.name);
                     Ok(())
                 }
                 Some(ResolveState::Unresolved) => todo!("throw error"),
-                None => todo!(),
+                None => todo!("none"),
             },
-            Expr::Assignment(_, _) => todo!(),
+            Expr::Assignment(id, expr) => self.visit_assignment_expr(id, *expr),
         }
     }
 
     fn visit_unary_expr(&mut self, op: UnaryOperator, expr: Expr) -> Self::Value {
-        todo!()
+        self.visit_expr(expr)?;
+
+        Ok(())
     }
 
     fn visit_binary_expr(&mut self, left: Expr, op: BinaryOperator, right: Expr) -> Self::Value {
-        todo!()
+        self.visit_expr(left)?;
+        self.visit_expr(right)?;
+
+        Ok(())
     }
 
     fn visit_literal(&mut self, literal: Literal) -> Self::Value {
-        todo!()
+        Ok(())
     }
 
     fn visit_grouping_expr(&mut self, expr: Expr) -> Self::Value {
-        todo!()
+        self.visit_expr(expr)?;
+
+        Ok(())
     }
 
     fn visit_assignment_expr(&mut self, id: Identifier, expr: Expr) -> Self::Value {
-        todo!()
+        self.visit_expr(expr.clone())?;
+        self.resolve_local(expr, id.name);
+
+        Ok(())
     }
 
     fn visit_logical_expr(&mut self, left: Expr, op: LogicalOperator, right: Expr) -> Self::Value {
-        todo!()
+        self.visit_expr(left)?;
+        self.visit_expr(right)?;
+
+        Ok(())
     }
 
     fn visit_call_expr(&mut self, callee: Expr, arguments: Vec<Expr>) -> Self::Value {
-        todo!()
+        self.visit_expr(callee)?;
+
+        for arg in arguments {
+            self.visit_expr(arg)?;
+        }
+
+        Ok(())
     }
 
     fn visit_program(&mut self, program: Program) -> Self::Value {
-        todo!()
+        program
+            .declarations
+            .iter()
+            .map(|d| self.visit_declaration(d.to_owned()))
+            .last()
+            .unwrap_or(Ok(()))
     }
 
     fn visit_declaration(&mut self, decl: Decl) -> Self::Value {
@@ -133,19 +157,28 @@ impl<R: BufRead, W: Write> Visitor for Resolver<R, W> {
                 self.declare(id.name.clone());
 
                 if let Some(expr) = expr {
-                    self.visit_expr(expr);
+                    self.visit_expr(expr)?;
                 }
 
                 self.define(id.name);
                 Ok(())
             }
-            Decl::Func(_, _, _) => todo!(),
+            Decl::Func(id, params, body) => self.visit_func_declaration(id, params, body),
             Decl::Stmt(_) => todo!(),
         }
     }
 
     fn visit_stmt(&mut self, stmt: Stmt) -> Self::Value {
-        todo!()
+        match stmt {
+            Stmt::Block(block) => self.visit_block(block),
+            Stmt::Expr(expr) => self.visit_expr(expr),
+            Stmt::Print(expr) => self.visit_expr(expr),
+            Stmt::Return(expr) => self.visit_return_stmt(expr),
+            Stmt::If(cond, stmt, else_stmt) => {
+                self.visit_if_stmt(cond, *stmt, else_stmt.map(|stmt| *stmt))
+            }
+            Stmt::While(cond, body) => self.visit_while_stmt(cond, *body),
+        }
     }
 
     fn visit_block(&mut self, block: Vec<Decl>) -> Self::Value {
@@ -159,11 +192,21 @@ impl<R: BufRead, W: Write> Visitor for Resolver<R, W> {
     }
 
     fn visit_if_stmt(&mut self, cond: Expr, stmt: Stmt, else_stmt: Option<Stmt>) -> Self::Value {
-        todo!()
+        self.visit_expr(cond)?;
+        self.visit_stmt(stmt)?;
+
+        if let Some(else_stmt) = else_stmt {
+            self.visit_stmt(else_stmt)?;
+        }
+
+        Ok(())
     }
 
     fn visit_while_stmt(&mut self, cond: Expr, body: Stmt) -> Self::Value {
-        todo!()
+        self.visit_expr(cond)?;
+        self.visit_stmt(body)?;
+
+        Ok(())
     }
 
     fn visit_func_declaration(
@@ -172,10 +215,25 @@ impl<R: BufRead, W: Write> Visitor for Resolver<R, W> {
         parameters: Vec<Identifier>,
         body: Stmt,
     ) -> Self::Value {
-        todo!()
+        self.begin_scope();
+
+        parameters.into_iter().for_each(|id| {
+            self.declare(id.name.clone());
+            self.define(id.name);
+        });
+
+        self.visit_stmt(body)?;
+
+        self.end_scope();
+
+        Ok(())
     }
 
     fn visit_return_stmt(&mut self, expr: Option<Expr>) -> Self::Value {
-        todo!()
+        if let Some(e) = expr {
+            self.visit_expr(e)?;
+        }
+
+        Ok(())
     }
 }
