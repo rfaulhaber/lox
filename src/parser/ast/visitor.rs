@@ -30,7 +30,12 @@ pub trait Visitor: Sized {
 
     fn visit_declaration(&mut self, decl: Decl) -> Self::Value;
 
-    fn visit_class_delcaration(&mut self, id: Identifier, funcs: Vec<Decl>) -> Self::Value;
+    fn visit_class_delcaration(
+        &mut self,
+        id: Identifier,
+        superclass: Option<Identifier>,
+        funcs: Vec<Decl>,
+    ) -> Self::Value;
 
     fn visit_stmt(&mut self, stmt: Stmt) -> Self::Value;
 

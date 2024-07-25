@@ -5,7 +5,8 @@ use super::{
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Decl {
-    Class(Identifier, Vec<Decl>),
+    // class name, superclass, body
+    Class(Identifier, Option<Identifier>, Vec<Decl>),
     // function name, parameters, body
     Func(Identifier, Vec<Identifier>, Stmt),
     Var(Identifier, Option<Expr>),

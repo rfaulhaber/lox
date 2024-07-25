@@ -6,6 +6,8 @@ pub enum Expr {
     Binary(Box<Expr>, BinaryOperator, Box<Expr>),
     Logical(Box<Expr>, LogicalOperator, Box<Expr>),
     Grouping(Box<Expr>),
+    Get(Box<Expr>, Identifier),
+    Set(Box<Expr>, Identifier, Box<Expr>),
     Var(Identifier),
     Assignment(Identifier, Box<Expr>),
 }

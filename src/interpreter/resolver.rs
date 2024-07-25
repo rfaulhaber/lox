@@ -153,7 +153,9 @@ impl<R: BufRead, W: Write> Visitor for Resolver<R, W> {
 
     fn visit_declaration(&mut self, decl: Decl) -> Self::Value {
         match decl {
-            Decl::Class(id, funcs) => self.visit_class_delcaration(id, funcs),
+            Decl::Class(id, superclass, funcs) => {
+                self.visit_class_delcaration(id, superclass, funcs)
+            }
             Decl::Var(id, expr) => {
                 self.declare(id.name.clone());
 
@@ -238,7 +240,12 @@ impl<R: BufRead, W: Write> Visitor for Resolver<R, W> {
         Ok(())
     }
 
-    fn visit_class_delcaration(&mut self, id: Identifier, funcs: Vec<Decl>) -> Self::Value {
+    fn visit_class_delcaration(
+        &mut self,
+        id: Identifier,
+        superclass: Option<Identifier>,
+        funcs: Vec<Decl>,
+    ) -> Self::Value {
         todo!();
     }
 }

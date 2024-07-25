@@ -317,6 +317,20 @@ impl<'p> Parser<'p> {
 
         let name = self.parse_identifier()?;
 
+        let superclass = if self
+            .lexer
+            .peek()
+            .is_some_and(|next| next.kind == TokenType::Less)
+        {
+            let _ = self.lexer.next(); // discard "<"
+
+            let id = self.parse_identifier()?;
+
+            Some(id)
+        } else {
+            None
+        };
+
         let _ = self.consume_single_token(TokenType::LeftBrace)?;
 
         let methods = self.parse_until(TokenType::RightBrace, |parser: &mut Parser| {
@@ -325,7 +339,7 @@ impl<'p> Parser<'p> {
 
         let _ = self.lexer.next(); // discard final "}"
 
-        Ok(Decl::Class(name, methods))
+        Ok(Decl::Class(name, superclass, methods))
     }
 
     fn parse_identifier(&mut self) -> ParseResult<Identifier> {
@@ -572,6 +586,14 @@ impl<'p> Parser<'p> {
                 },
                 None => todo!("unexpected end of input"),
             }
+        } else if self.lexer.peek().is_some_and(|t| t.kind == TokenType::Dot) {
+            let _ = self.lexer.next(); // consume "."
+
+            let id = self.parse_identifier()?;
+
+            let mut path = Vec::new();
+
+            todo!();
         }
 
         Ok(expr)
@@ -850,6 +872,7 @@ mod tests {
                 Identifier {
                     name: "Breakfast".into(),
                 },
+                None,
                 vec![
                     Decl::Func(
                         Identifier {
@@ -878,6 +901,42 @@ mod tests {
                         )))]),
                     ),
                 ],
+            )],
+        };
+
+        assert_eq!(result.unwrap(), expected);
+    }
+
+    #[test]
+    fn parse_superclass() {
+        let input = r#"
+            class Breakfast < Meal {
+                cook() {
+                    print "Eggs a-fryin'!";
+                }
+            }
+"#;
+
+        let result = Parser::new(Lexer::new(input)).parse();
+
+        let expected = Program {
+            declarations: vec![Decl::Class(
+                Identifier {
+                    name: "Breakfast".into(),
+                },
+                Some(Identifier {
+                    name: "Meal".into(),
+                    er,
+                }),
+                vec![Decl::Func(
+                    Identifier {
+                        name: "cook".into(),
+                    },
+                    Vec::new(),
+                    Stmt::Block(vec![Decl::Stmt(Stmt::Print(Expr::Literal(
+                        Literal::String("\"Eggs a-fryin'!\"".into()),
+                    )))]),
+                )],
             )],
         };
 

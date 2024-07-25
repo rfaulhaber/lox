@@ -169,7 +169,9 @@ impl<R: BufRead, W: Write> Visitor for Interpreter<R, W> {
 
     fn visit_declaration(&mut self, decl: Decl) -> Self::Value {
         match decl {
-            Decl::Class(id, funcs) => self.visit_class_delcaration(id, funcs),
+            Decl::Class(id, superclass, funcs) => {
+                self.visit_class_delcaration(id, superclass, funcs)
+            }
             Decl::Var(id, expr) => match expr {
                 Some(expr) => match self.visit_expr(expr) {
                     Ok(value) => {
@@ -366,7 +368,12 @@ impl<R: BufRead, W: Write> Visitor for Interpreter<R, W> {
         Err(EvalError::InternalReturn(ret_val))
     }
 
-    fn visit_class_delcaration(&mut self, id: Identifier, funcs: Vec<Decl>) -> Self::Value {
+    fn visit_class_delcaration(
+        &mut self,
+        id: Identifier,
+        superclass: Option<Identifier>,
+        funcs: Vec<Decl>,
+    ) -> Self::Value {
         todo!()
     }
 }
