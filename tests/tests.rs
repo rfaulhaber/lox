@@ -3,47 +3,74 @@ use lox::interpreter::Interpreter;
 use lox::{parser::ast::program::Program, parser::Parser};
 
 #[macro_export]
+macro_rules! make_interpreter_test_inner {
+    ($name:ident) => {
+        let test_case = TestCase::new(stringify!($name)).unwrap();
+
+        let TestCase {
+            mut interpreter,
+            ast,
+            expected,
+            ..
+        } = test_case;
+
+        let result = interpreter.eval(ast);
+
+        assert!(result.is_ok(), "received err result: {:?}", result);
+
+        let output = interpreter.get_output();
+
+        assert_eq!(*output, expected);
+    };
+
+    ($name:ident, $override:expr) => {
+        let test_case = TestCase::new(stringify!($name)).unwrap();
+
+        let TestCase {
+            mut interpreter,
+            ast,
+            ..
+        } = test_case;
+
+        let result = interpreter.eval(ast);
+
+        assert!(result.is_ok());
+
+        let output = interpreter.get_output();
+
+        $override(output);
+    };
+}
+
+#[macro_export]
 macro_rules! make_interpreter_test {
     ($name:ident) => {
         #[test]
         fn $name() {
-            let test_case = TestCase::new(stringify!($name)).unwrap();
+            make_interpreter_test_inner!($name);
+        }
+    };
 
-            let TestCase {
-                mut interpreter,
-                ast,
-                expected,
-                ..
-            } = test_case;
-
-            let result = interpreter.eval(ast);
-
-            assert!(result.is_ok(), "received err result: {:?}", result);
-
-            let output = interpreter.get_output();
-
-            assert_eq!(*output, expected);
+    ($name:ident, ignore) => {
+        #[test]
+        #[ignore]
+        fn $name() {
+            make_interpreter_test_inner!($name);
         }
     };
 
     ($name:ident, $override:expr) => {
         #[test]
         fn $name() {
-            let test_case = TestCase::new(stringify!($name)).unwrap();
+            make_interpreter_test_inner!($name, $override);
+        }
+    };
 
-            let TestCase {
-                mut interpreter,
-                ast,
-                ..
-            } = test_case;
-
-            let result = interpreter.eval(ast);
-
-            assert!(result.is_ok());
-
-            let output = interpreter.get_output();
-
-            $override(output);
+    ($name:ident, $override:expr, ignore) => {
+        #[test]
+        #[ignore]
+        fn $name() {
+            make_interpreter_test_inner!($name, $override);
         }
     };
 }

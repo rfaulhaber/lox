@@ -1,3 +1,6 @@
 #+title: lox
 
 Implementation of Lox per the [[http://craftinginterpreters.com][Crafting Interpreters]] book.
+
+*note*: the tree-walk implementation is not complete. I did not implement environments correctly in Rust and decided I didn't
+ care.

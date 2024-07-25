@@ -11,7 +11,6 @@ use crate::parser::ast::{
     visitor::Visitor,
 };
 
-use super::env::RefEnv;
 use super::{
     env::Env,
     error::EvalError,
@@ -86,9 +85,11 @@ impl<R: BufRead, W: Write> Interpreter<R, W> {
                     ));
                 }
 
-                let current_env = self.env.clone();
+                let current_env = (*self.env).clone();
 
-                self.env = Rc::new(closure);
+                let _ = closure.borrow_mut().push_scope();
+
+                self.env.swap(&closure);
 
                 parameters
                     .into_iter()
@@ -102,7 +103,9 @@ impl<R: BufRead, W: Write> Interpreter<R, W> {
                     _ => unreachable!("didn't get a block"),
                 };
 
-                self.env = current_env;
+                self.env.swap(&current_env);
+
+                // self.env = current_env;
 
                 result
             }
@@ -349,7 +352,7 @@ impl<R: BufRead, W: Write> Visitor for Interpreter<R, W> {
             name: name.clone(),
             parameters: parameters.into_iter().map(|i| i.name).collect(),
             body,
-            closure: RefCell::new(Env::from_existing(self.env.borrow_mut().clone())),
+            closure: (*self.env).clone(),
         });
 
         self.env_define(name, func);
