@@ -169,6 +169,7 @@ impl<R: BufRead, W: Write> Visitor for Interpreter<R, W> {
 
     fn visit_declaration(&mut self, decl: Decl) -> Self::Value {
         match decl {
+            Decl::Class(id, funcs) => self.visit_class_delcaration(id, funcs),
             Decl::Var(id, expr) => match expr {
                 Some(expr) => match self.visit_expr(expr) {
                     Ok(value) => {
@@ -363,6 +364,10 @@ impl<R: BufRead, W: Write> Visitor for Interpreter<R, W> {
     fn visit_return_stmt(&mut self, expr: Option<Expr>) -> Self::Value {
         let ret_val = expr.map_or(Ok(LoxValue::Nil), |expr| self.visit_expr(expr))?;
         Err(EvalError::InternalReturn(ret_val))
+    }
+
+    fn visit_class_delcaration(&mut self, id: Identifier, funcs: Vec<Decl>) -> Self::Value {
+        todo!()
     }
 }
 

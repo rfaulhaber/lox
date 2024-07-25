@@ -7,12 +7,9 @@ use self::ast::{
     stmt::Stmt,
 };
 
-use crate::{
-    lexer::{
-        lexer::Lexer,
-        token::{Token, TokenType},
-    },
-    parser,
+use crate::lexer::{
+    lexer::Lexer,
+    token::{Token, TokenType},
 };
 use std::iter::Peekable;
 use thiserror::Error;
@@ -33,6 +30,11 @@ pub enum ParseError {
     InvalidAssignmnetTarget,
     #[error("Missing '}}' in block")]
     MissingBlockClose,
+}
+
+enum FunctionParseMode {
+    Method,
+    Function,
 }
 
 #[derive(Debug)]
@@ -74,7 +76,10 @@ impl<'p> Parser<'p> {
 
     fn parse_decl(&mut self) -> ParseResult<Decl> {
         match self.lexer.peek() {
-            Some(t) if t.kind == TokenType::Fun => self.parse_func_decl(),
+            Some(t) if t.kind == TokenType::Class => self.parse_class_decl(),
+            Some(t) if t.kind == TokenType::Fun => {
+                self.parse_func_decl(FunctionParseMode::Function)
+            }
             Some(t) if t.kind == TokenType::Var => self.parse_decl_stmt(),
             Some(_) => Ok(Decl::Stmt(self.parse_stmt()?)),
             None => todo!(),
@@ -252,8 +257,10 @@ impl<'p> Parser<'p> {
         }
     }
 
-    fn parse_func_decl(&mut self) -> ParseResult<Decl> {
-        let _ = self.lexer.next(); // discard "func"
+    fn parse_func_decl(&mut self, mode: FunctionParseMode) -> ParseResult<Decl> {
+        if matches!(mode, FunctionParseMode::Function) {
+            let _ = self.lexer.next(); // discard "func"
+        }
 
         let func_name = self.parse_identifier()?;
 
@@ -303,6 +310,22 @@ impl<'p> Parser<'p> {
             )),
             None => Err(ParseError::UnexpectedEndOfInput),
         }
+    }
+
+    fn parse_class_decl(&mut self) -> ParseResult<Decl> {
+        let _ = self.lexer.next(); // discard "class"
+
+        let name = self.parse_identifier()?;
+
+        let _ = self.consume_single_token(TokenType::LeftBrace)?;
+
+        let methods = self.parse_until(TokenType::RightBrace, |parser: &mut Parser| {
+            parser.parse_func_decl(FunctionParseMode::Method)
+        })?;
+
+        let _ = self.lexer.next(); // discard final "}"
+
+        Ok(Decl::Class(name, methods))
     }
 
     fn parse_identifier(&mut self) -> ParseResult<Identifier> {
@@ -591,6 +614,24 @@ impl<'p> Parser<'p> {
             None => Err(ParseError::UnexpectedEndOfInput),
         }
     }
+
+    fn parse_until<E>(
+        &mut self,
+        token_type: TokenType,
+        parser: impl Fn(&mut Parser<'p>) -> ParseResult<E>,
+    ) -> ParseResult<Vec<E>> {
+        let mut res = Vec::new();
+
+        while self
+            .lexer
+            .peek()
+            .is_some_and(|next| next.kind != token_type)
+        {
+            res.push(parser(self)?);
+        }
+
+        Ok(res)
+    }
 }
 
 fn try_parse_number(t: Token) -> ParseResult<Expr> {
@@ -783,6 +824,61 @@ mod tests {
                     Expr::Literal(Literal::Number(Number::Int(2))),
                 ],
             )))],
+        };
+
+        assert_eq!(result.unwrap(), expected);
+    }
+
+    #[test]
+    fn parse_class() {
+        let input = r#"
+            class Breakfast {
+                cook() {
+                    print "Eggs a-fryin'!";
+                }
+
+                serve(who) {
+                    print "Enjoy your breakfast, " + who + ".";
+                }
+            }
+"#;
+
+        let result = Parser::new(Lexer::new(input)).parse();
+
+        let expected = Program {
+            declarations: vec![Decl::Class(
+                Identifier {
+                    name: "Breakfast".into(),
+                },
+                vec![
+                    Decl::Func(
+                        Identifier {
+                            name: "cook".into(),
+                        },
+                        Vec::new(),
+                        Stmt::Block(vec![Decl::Stmt(Stmt::Print(Expr::Literal(
+                            Literal::String("\"Eggs a-fryin'!\"".into()),
+                        )))]),
+                    ),
+                    Decl::Func(
+                        Identifier {
+                            name: "serve".into(),
+                        },
+                        vec![Identifier { name: "who".into() }],
+                        Stmt::Block(vec![Decl::Stmt(Stmt::Print(Expr::Binary(
+                            Box::new(Expr::Binary(
+                                Box::new(Expr::Literal(Literal::String(
+                                    "\"Enjoy your breakfast, \"".into(),
+                                ))),
+                                BinaryOperator::Add,
+                                Box::new(Expr::Var(Identifier { name: "who".into() })),
+                            )),
+                            BinaryOperator::Add,
+                            Box::new(Expr::Literal(Literal::String("\".\"".into()))),
+                        )))]),
+                    ),
+                ],
+            )],
         };
 
         assert_eq!(result.unwrap(), expected);
