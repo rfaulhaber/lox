@@ -92,6 +92,8 @@ impl<R: BufRead, W: Write> Visitor for Resolver<R, W> {
                 None => todo!("none"),
             },
             Expr::Assignment(id, expr) => self.visit_assignment_expr(id, *expr),
+            Expr::Get(_, _) => todo!(),
+            Expr::Set(_, _, _) => todo!(),
         }
     }
 

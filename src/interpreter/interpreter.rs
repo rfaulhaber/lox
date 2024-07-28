@@ -255,6 +255,8 @@ impl<R: BufRead, W: Write> Visitor for Interpreter<R, W> {
             Expr::Assignment(id, expr) => self.visit_assignment_expr(id, *expr),
             Expr::Logical(left, op, right) => self.visit_logical_expr(*left, op, *right),
             Expr::Call(callee, arguments) => self.visit_call_expr(*callee, arguments),
+            Expr::Get(_, _) => todo!(),
+            Expr::Set(_, _, _) => todo!(),
         }
     }
 

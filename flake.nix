@@ -21,6 +21,10 @@
                 url = "https://storage.googleapis.com/dart-archive/channels/stable/release/2.19.6/sdk/dartsdk-linux-x64-release.zip";
                 sha256 = "sha256:0kvhvwd2q8s7mnjgvhl6gr3y73agcd0y79sm844xd8ybd9gg5pqg";
               };
+              "2.19.6-aarch64-darwin" = builtins.fetchurl {
+                url = "https://storage.googleapis.com/dart-archive/channels/stable/release/2.19.6/sdk/dartsdk-macos-arm64-release.zip";
+                sha256 = "sha256:1dpd8czllsxqly7hrcazp8g9b5zj6ibs93l5qyykijjbyjv58srw";
+              };
             };
           };
       };
@@ -53,7 +57,7 @@
           rust-analyzer
           rustup
 
-          gdb
+          lldb
 
           # for canonical tests
           zulu

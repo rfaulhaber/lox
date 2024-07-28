@@ -377,6 +377,8 @@ impl<'p> Parser<'p> {
         self.parse_assignment()
     }
 
+    // assignment     → ( call "." )? IDENTIFIER "=" assignment
+    //                | logic_or ;
     fn parse_assignment(&mut self) -> ParseResult<Expr> {
         let expr = self.parse_or()?;
 
@@ -390,6 +392,7 @@ impl<'p> Parser<'p> {
 
             match expr {
                 Expr::Var(id) => return Ok(Expr::Assignment(id, Box::new(value))),
+                Expr::Get(get_expr, id) => return Ok(Expr::Set(get_expr, id, Box::new(value))),
                 _ => return Err(ParseError::InvalidAssignmnetTarget),
             }
         }
@@ -547,56 +550,50 @@ impl<'p> Parser<'p> {
         self.parse_call()
     }
 
+    // call           → primary ( "(" arguments? ")" | "." IDENTIFIER )* ;
     fn parse_call(&mut self) -> ParseResult<Expr> {
-        let expr = self.parse_primary()?;
+        let mut expr = self.parse_primary()?;
 
-        if self
-            .lexer
-            .peek()
-            .is_some_and(|t| t.kind == TokenType::LeftParen)
-        {
-            let _ = self.lexer.next();
-
-            let mut arguments = Vec::new();
-
+        loop {
             match self.lexer.peek() {
-                Some(t) => match t.kind {
-                    TokenType::RightParen => {
-                        let _ = self.lexer.next();
-
-                        return Ok(Expr::Call(Box::new(expr), arguments));
-                    }
-                    _ => {
-                        arguments.push(self.parse_expr()?);
-
-                        while self
-                            .lexer
-                            .peek()
-                            .is_some_and(|t| t.kind == TokenType::Comma)
-                        {
-                            let _ = self.lexer.next();
-
-                            arguments.push(self.parse_expr()?);
-                        }
-
-                        self.consume_single_token(TokenType::RightParen)?;
-
-                        return Ok(Expr::Call(Box::new(expr), arguments));
-                    }
-                },
-                None => todo!("unexpected end of input"),
+                Some(t) if t.kind == TokenType::LeftParen => {
+                    let _ = self.lexer.next(); // consume "("
+                    let arguments = self.parse_arguments()?;
+                    expr = Expr::Call(Box::new(expr), arguments);
+                }
+                Some(t) if t.kind == TokenType::Dot => {
+                    let _ = self.lexer.next(); // consume "."
+                    let id = self.parse_identifier()?;
+                    expr = Expr::Get(Box::new(expr), id);
+                }
+                Some(_) => break,
+                None => return Err(ParseError::UnexpectedEndOfInput),
             }
-        } else if self.lexer.peek().is_some_and(|t| t.kind == TokenType::Dot) {
-            let _ = self.lexer.next(); // consume "."
-
-            let id = self.parse_identifier()?;
-
-            let mut path = Vec::new();
-
-            todo!();
         }
 
         Ok(expr)
+    }
+
+    fn parse_arguments(&mut self) -> ParseResult<Vec<Expr>> {
+        let mut arguments = Vec::new();
+
+        loop {
+            match self.lexer.peek() {
+                Some(t) if t.kind == TokenType::RightParen => {
+                    let _ = self.lexer.next(); // discard ")"
+                    break;
+                }
+                Some(_) => {
+                    let expr = self.parse_expr()?;
+                    arguments.push(expr);
+
+                    let _ = self.lexer.next_if(|t| t.kind == TokenType::Comma);
+                }
+                None => return Err(ParseError::UnexpectedEndOfInput),
+            }
+        }
+
+        Ok(arguments)
     }
 
     fn parse_primary(&mut self) -> ParseResult<Expr> {
@@ -926,7 +923,6 @@ mod tests {
                 },
                 Some(Identifier {
                     name: "Meal".into(),
-                    er,
                 }),
                 vec![Decl::Func(
                     Identifier {
@@ -938,6 +934,68 @@ mod tests {
                     )))]),
                 )],
             )],
+        };
+
+        assert_eq!(result.unwrap(), expected);
+    }
+
+    #[test]
+    fn parse_get_path() {
+        let input = "egg.scramble(3).with(cheddar);";
+
+        let result = Parser::new(Lexer::new(input)).parse();
+
+        let expected = Program {
+            declarations: vec![Decl::Stmt(Stmt::Expr(Expr::Call(
+                Box::new(Expr::Get(
+                    Box::new(Expr::Call(
+                        Box::new(Expr::Get(
+                            Box::new(Expr::Var(Identifier { name: "egg".into() })),
+                            Identifier {
+                                name: "scramble".into(),
+                            },
+                        )),
+                        vec![Expr::Literal(Literal::Number(Number::Int(3)))],
+                    )),
+                    Identifier {
+                        name: "with".into(),
+                    },
+                )),
+                vec![Expr::Var(Identifier {
+                    name: "cheddar".into(),
+                })],
+            )))],
+        };
+
+        assert_eq!(result.unwrap(), expected);
+    }
+
+    #[test]
+    fn parse_set_expr() {
+        let input = "breakfast.omelette.filling.meat = ham;";
+
+        let result = Parser::new(Lexer::new(input)).parse();
+
+        let expected = Program {
+            declarations: vec![Decl::Stmt(Stmt::Expr(Expr::Set(
+                Box::new(Expr::Get(
+                    Box::new(Expr::Get(
+                        Box::new(Expr::Var(Identifier {
+                            name: "breakfast".into(),
+                        })),
+                        Identifier {
+                            name: "omelette".into(),
+                        },
+                    )),
+                    Identifier {
+                        name: "filling".into(),
+                    },
+                )),
+                Identifier {
+                    name: "meat".into(),
+                },
+                Box::new(Expr::Var(Identifier { name: "ham".into() })),
+            )))],
         };
 
         assert_eq!(result.unwrap(), expected);
