@@ -26,7 +26,7 @@ where
 {
     reader: R,
     writer: W,
-    env: Rc<RefCell<Env>>,
+    env: Env,
     locals: HashMap<Expr, usize>,
 }
 
@@ -35,7 +35,7 @@ impl<R: BufRead, W: Write> Interpreter<R, W> {
         Self {
             reader,
             writer,
-            env: Rc::new(RefCell::new(Env::new_with_builtins())),
+            env: Env::new_with_builtins(),
             locals: HashMap::new(),
         }
     }
@@ -44,72 +44,45 @@ impl<R: BufRead, W: Write> Interpreter<R, W> {
         self.visit_program(program)
     }
 
-    pub fn get_output(&mut self) -> &W {
+    pub fn output(&mut self) -> &W {
         self.writer.borrow()
     }
 
-    pub(super) fn resolve_expr(&mut self, expr: Expr, size: usize) {
-        todo!();
-    }
-
-    fn env_define<S: ToString>(&mut self, name: S, value: LoxValue) {
-        (*self.env).borrow_mut().define(name, value);
-    }
-
-    fn env_assign<S: ToString>(&mut self, name: S, value: LoxValue) -> Result<(), EvalError> {
-        (*self.env).borrow_mut().assign(name, value)
-    }
-
-    fn env_get<S: ToString>(&mut self, name: S) -> Option<LoxValue> {
-        (*self.env).borrow_mut().get(name)
-    }
-
-    // fn env_get_at<S: ToString>(&mut self, dist: usize, name: S) -> Option<LoxValue> {
-    //     todo!()
-    // }
-
-    fn call(&mut self, callable: Callable, args: Vec<LoxValue>) -> EvalResult {
-        match callable {
-            Callable::Native { func, .. } => func(args),
-            Callable::Function {
-                name,
-                parameters,
-                body,
-                closure,
-            } => {
-                if args.len() != parameters.len() {
-                    return Err(EvalError::NotEnoughArguments(
-                        name,
-                        parameters.len(),
-                        args.len(),
-                    ));
-                }
-
-                let current_env = (*self.env).clone();
-
-                let _ = closure.borrow_mut().push_scope();
-
-                self.env.swap(&closure);
-
-                parameters
-                    .into_iter()
-                    .zip(args.into_iter())
-                    .for_each(|(parameter, arg)| {
-                        self.env_define(parameter, arg);
-                    });
-
-                let result = match body {
-                    Stmt::Block(v) => self.eval_fn_block(v),
-                    _ => unreachable!("didn't get a block"),
-                };
-
-                self.env.swap(&current_env);
-
-                // self.env = current_env;
-
-                result
-            }
+    fn call<C>(&mut self, callable: C, args: Vec<LoxValue>) -> EvalResult
+    where
+        C: Callable<R, W>,
+        R: BufRead,
+        W: Write,
+    {
+        if args.len() != callable.arity().into() {
+            return Err(EvalError::NotEnoughArguments(
+                callable.name().to_string(),
+                callable.arity().into(),
+                args.len(),
+            ));
         }
+
+        let current_env = self.env;
+
+        let _ = closure.borrow_mut().push_scope();
+
+        self.env.swap(&closure);
+
+        parameters
+            .into_iter()
+            .zip(args.into_iter())
+            .for_each(|(parameter, arg)| {
+                self.env_define(parameter, arg);
+            });
+
+        let result = match body {
+            Stmt::Block(v) => self.eval_fn_block(v),
+            _ => unreachable!("didn't get a block"),
+        };
+
+        self.env = current_env;
+
+        result
     }
 
     fn eval_fn_block(&mut self, block: Vec<Decl>) -> EvalResult {

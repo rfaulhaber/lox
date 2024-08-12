@@ -1,14 +1,12 @@
 use std::{
-    cell::RefCell,
     cmp::Ordering,
     fmt::Display,
     ops::{Add, Div, Mul, Sub},
-    rc::Rc,
 };
 
 use crate::parser::ast::stmt::Stmt;
 
-use super::{env::Env, EvalError, EvalResult};
+use super::{env::Env, interpreter::Interpreter, EvalError, EvalResult};
 
 macro_rules! binary_number_arithmetic_impl {
     ($func_name:ident, $op_name:ident) => {
@@ -32,6 +30,16 @@ macro_rules! binary_number_arithmetic_impl {
     };
 }
 
+pub trait Callable<R, W>
+where
+    R: std::io::BufRead,
+    W: std::fmt::Write,
+{
+    fn arity(&self) -> u8;
+    fn call(&self, interpreter: &mut Interpreter<R, W>, args: &[LoxValue]) -> EvalResult;
+    fn name(&self) -> &str;
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub enum LoxValue {
     Nil,
@@ -39,7 +47,8 @@ pub enum LoxValue {
     Int(i64),
     Float(f64),
     String(String),
-    Callable(Callable),
+    Native(NativeFunction),
+    Function(Function),
 }
 
 impl Display for LoxValue {
@@ -50,20 +59,8 @@ impl Display for LoxValue {
             LoxValue::Int(i) => write!(f, "{}", i),
             LoxValue::Float(fl) => write!(f, "{}", fl),
             LoxValue::String(s) => write!(f, "\"{}\"", s),
-            LoxValue::Callable(c) => write!(f, "{}", c),
-        }
-    }
-}
-
-impl Display for Callable {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Callable::Native { name, .. } => {
-                write!(f, "<builtin func {}>", name)
-            }
-            Callable::Function { name, .. } => {
-                write!(f, "<func {}>", name)
-            }
+            LoxValue::Native(func) => write!(f, "<builtin: {}/{}>", func.name, func.arity),
+            LoxValue::Function(func) => write!(f, "<func: {}/{}>", func.name, func.arity()),
         }
     }
 }
@@ -98,12 +95,6 @@ impl From<bool> for LoxValue {
     }
 }
 
-impl From<Callable> for LoxValue {
-    fn from(value: Callable) -> Self {
-        LoxValue::Callable(value)
-    }
-}
-
 impl LoxValue {
     // binary_number_arithmetic_impl!(try_add, add);
     binary_number_arithmetic_impl!(try_sub, sub);
@@ -124,7 +115,8 @@ impl LoxValue {
                     LoxValue::Int(i) => i.to_string(),
                     LoxValue::Float(f) => f.to_string(),
                     LoxValue::String(s) => s,
-                    LoxValue::Callable(c) => format!("{}", c),
+                    LoxValue::Native(n) => n.name,
+                    LoxValue::Function(f) => f.name,
                 };
 
                 let mut new_str = String::new();
@@ -165,12 +157,12 @@ impl LoxValue {
             (LoxValue::Float(_), _) => false,
             (LoxValue::String(_), _) => false,
             (
-                LoxValue::Callable(Callable::Native { name: left, .. }),
-                LoxValue::Callable(Callable::Native { name: right, .. }),
+                LoxValue::Native(NativeFunction { name: left, .. }),
+                LoxValue::Native(NativeFunction { name: right, .. }),
             ) => left == right,
             (
-                LoxValue::Callable(Callable::Function { name: left, .. }),
-                LoxValue::Callable(Callable::Function { name: right, .. }),
+                LoxValue::Function(Function { name: left, .. }),
+                LoxValue::Function(Function { name: right, .. }),
             ) => left == right,
             _ => false,
         }
@@ -178,32 +170,50 @@ impl LoxValue {
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub enum Callable {
-    Native {
-        name: String,
-        arity: usize,
-        func: fn(Vec<LoxValue>) -> EvalResult,
-    },
-    Function {
-        name: String,
-        parameters: Vec<String>,
-        body: Stmt,
-        closure: RefCell<Env>,
-    },
+pub struct NativeFunction {
+    pub name: String,
+    pub arity: u8,
+    pub function: fn(&[LoxValue]) -> EvalResult,
 }
 
-impl Callable {
-    fn name(&self) -> String {
-        match self {
-            Callable::Native { name, .. } => name.to_string(),
-            Callable::Function { name, .. } => name.to_string(),
-        }
+impl<R: std::io::BufRead, W: std::fmt::Write> Callable<R, W> for NativeFunction {
+    fn arity(&self) -> u8 {
+        self.arity
     }
 
-    fn is_builtin(&self) -> bool {
-        match self {
-            Callable::Native { .. } => true,
-            Callable::Function { .. } => false,
-        }
+    fn call(&self, _: &mut Interpreter<R, W>, args: &[LoxValue]) -> EvalResult {
+        (self.function)(args)
+    }
+
+    fn name(&self) -> &str {
+        &self.name
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct Function {
+    pub name: String,
+    pub parameters: Vec<String>,
+    pub body: Stmt,
+    pub closure: Box<Env>,
+}
+
+impl Function {
+    fn arity(&self) -> u8 {
+        self.parameters.len().try_into().unwrap()
+    }
+}
+
+impl<R: std::io::BufRead, W: std::fmt::Write> Callable<R, W> for Function {
+    fn arity(&self) -> u8 {
+        Function::arity(&self)
+    }
+
+    fn call(&self, interpreter: &mut Interpreter<R, W>, args: &[LoxValue]) -> EvalResult {
+        todo!()
+    }
+
+    fn name(&self) -> &str {
+        &self.name
     }
 }
