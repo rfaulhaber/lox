@@ -6,8 +6,8 @@ use super::{value::NativeFunction, EvalError, LoxValue};
 
 #[derive(Debug, Clone, PartialEq)]
 pub(super) struct Env {
-    enclosing: Option<Box<Env>>,
-    values: HashMap<String, Option<LoxValue>>,
+    pub(super) enclosing: Option<Box<Env>>,
+    pub(super) values: HashMap<String, Option<LoxValue>>,
 }
 
 pub(super) enum LookupResult<'l> {
@@ -48,9 +48,10 @@ impl Env {
             self.values.insert(name, value);
             Ok(())
         } else if let Some(enclosing) = &mut self.enclosing {
-            enclosing.assign(name, value);
+            enclosing.assign(name, value)?;
             Ok(())
         } else {
+            println!("current values: {:?}", self.values);
             Err(EvalError::UndefinedVariable(name))
         }
     }

@@ -18,7 +18,7 @@ macro_rules! make_interpreter_test_inner {
 
         assert!(result.is_ok(), "received err result: {:?}", result);
 
-        let output = interpreter.get_output();
+        let output = interpreter.output();
 
         assert_eq!(*output, expected);
     };
@@ -36,7 +36,7 @@ macro_rules! make_interpreter_test_inner {
 
         assert!(result.is_ok());
 
-        let output = interpreter.get_output();
+        let output = interpreter.output();
 
         $override(output);
     };

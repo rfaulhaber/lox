@@ -1,7 +1,6 @@
 use crate::parser::ast::expr::Number;
 use std::borrow::Borrow;
-use std::collections::HashMap;
-use std::{cell::RefCell, fmt::Write, io::BufRead, rc::Rc};
+use std::{fmt::Write, io::BufRead};
 
 use crate::parser::ast::{
     decl::Decl,
@@ -11,6 +10,7 @@ use crate::parser::ast::{
     visitor::Visitor,
 };
 
+use super::value::Function;
 use super::{
     env::Env,
     error::EvalError,
@@ -26,8 +26,8 @@ where
 {
     reader: R,
     writer: W,
-    env: Env,
-    locals: HashMap<Expr, usize>,
+    pub(super) env: Env,
+    pub(super) ret_val: Option<LoxValue>,
 }
 
 impl<R: BufRead, W: Write> Interpreter<R, W> {
@@ -36,11 +36,15 @@ impl<R: BufRead, W: Write> Interpreter<R, W> {
             reader,
             writer,
             env: Env::new_with_builtins(),
-            locals: HashMap::new(),
+            ret_val: None,
         }
     }
 
     pub fn eval(&mut self, program: Program) -> EvalResult {
+        if let Some(value) = self.ret_val.clone() {
+            return Ok(value);
+        }
+
         self.visit_program(program)
     }
 
@@ -48,59 +52,8 @@ impl<R: BufRead, W: Write> Interpreter<R, W> {
         self.writer.borrow()
     }
 
-    fn call<C>(&mut self, callable: C, args: Vec<LoxValue>) -> EvalResult
-    where
-        C: Callable<R, W>,
-        R: BufRead,
-        W: Write,
-    {
-        if args.len() != callable.arity().into() {
-            return Err(EvalError::NotEnoughArguments(
-                callable.name().to_string(),
-                callable.arity().into(),
-                args.len(),
-            ));
-        }
-
-        let current_env = self.env;
-
-        let _ = closure.borrow_mut().push_scope();
-
-        self.env.swap(&closure);
-
-        parameters
-            .into_iter()
-            .zip(args.into_iter())
-            .for_each(|(parameter, arg)| {
-                self.env_define(parameter, arg);
-            });
-
-        let result = match body {
-            Stmt::Block(v) => self.eval_fn_block(v),
-            _ => unreachable!("didn't get a block"),
-        };
-
-        self.env = current_env;
-
-        result
-    }
-
-    fn eval_fn_block(&mut self, block: Vec<Decl>) -> EvalResult {
-        let mut result = Ok(LoxValue::Nil);
-
-        for stmt in block.into_iter() {
-            result = match self.visit_declaration(stmt) {
-                Ok(val) => Ok(val),
-                Err(EvalError::InternalReturn(val)) => return Ok(val),
-                Err(e) => return Err(e),
-            };
-        }
-
-        result
-    }
-
-    fn look_up_variable<S: ToString>(&mut self, id: S, expr: Expr) -> EvalResult {
-        todo!();
+    pub(super) fn eval_call(&mut self, stmt: Stmt) -> EvalResult {
+        self.visit_stmt(stmt)
     }
 }
 
@@ -141,6 +94,10 @@ impl<R: BufRead, W: Write> Visitor for Interpreter<R, W> {
     }
 
     fn visit_declaration(&mut self, decl: Decl) -> Self::Value {
+        if let Some(val) = self.ret_val.clone() {
+            return Ok(val);
+        }
+
         match decl {
             Decl::Class(id, superclass, funcs) => {
                 self.visit_class_delcaration(id, superclass, funcs)
@@ -148,13 +105,13 @@ impl<R: BufRead, W: Write> Visitor for Interpreter<R, W> {
             Decl::Var(id, expr) => match expr {
                 Some(expr) => match self.visit_expr(expr) {
                     Ok(value) => {
-                        self.env_define(id.name, value.clone());
+                        self.env.define(id.name, Some(value.clone()));
                         Ok(value)
                     }
                     v => v,
                 },
                 None => {
-                    self.env_define(id.name, LoxValue::Nil);
+                    self.env.define(id.name, Some(LoxValue::Nil));
                     Ok(LoxValue::Nil)
                 }
             },
@@ -166,7 +123,7 @@ impl<R: BufRead, W: Write> Visitor for Interpreter<R, W> {
     }
 
     fn visit_block(&mut self, block: Vec<Decl>) -> Self::Value {
-        let _ = self.env.borrow_mut().push_scope();
+        self.env = Env::with_enclosing(self.env.clone());
 
         let result = block
             .into_iter()
@@ -174,7 +131,9 @@ impl<R: BufRead, W: Write> Visitor for Interpreter<R, W> {
             .last()
             .unwrap_or(Ok(LoxValue::Nil));
 
-        let _ = self.env.borrow_mut().pop_scope();
+        if let Some(env) = self.env.enclosing.clone() {
+            self.env = *env;
+        }
 
         result
     }
@@ -221,10 +180,11 @@ impl<R: BufRead, W: Write> Visitor for Interpreter<R, W> {
             Expr::Unary(op, rhs) => self.visit_unary_expr(op, *rhs),
             Expr::Binary(lhs, op, rhs) => self.visit_binary_expr(*lhs, op, *rhs),
             Expr::Grouping(expr) => self.visit_grouping_expr(*expr),
-            // Expr::Var(var) => self.look_up_variable(var.name, expr),
             Expr::Var(var) => self
-                .env_get(var.name.clone())
-                .ok_or_else(|| EvalError::UndefinedVariable(var.name)),
+                .env
+                .get(var.name.clone())
+                .ok_or_else(|| EvalError::UndefinedVariable(var.name))
+                .cloned(),
             Expr::Assignment(id, expr) => self.visit_assignment_expr(id, *expr),
             Expr::Logical(left, op, right) => self.visit_logical_expr(*left, op, *right),
             Expr::Call(callee, arguments) => self.visit_call_expr(*callee, arguments),
@@ -285,7 +245,7 @@ impl<R: BufRead, W: Write> Visitor for Interpreter<R, W> {
 
     fn visit_assignment_expr(&mut self, id: Identifier, expr: Expr) -> Self::Value {
         let value = self.visit_expr(expr)?;
-        self.env_assign(id.name, value.clone())?;
+        self.env.assign(id.name, Some(value.clone()))?;
 
         Ok(value)
     }
@@ -310,12 +270,13 @@ impl<R: BufRead, W: Write> Visitor for Interpreter<R, W> {
             .map(|expr| Ok(self.visit_expr(expr)?))
             .collect();
 
-        let callee = match callee_val {
-            LoxValue::Callable(c) => c,
-            v => return Err(EvalError::NotCallable(v)),
+        let callable: Box<dyn Callable<R, W>> = match callee_val {
+            LoxValue::Native(native) => Box::new(native),
+            LoxValue::Function(func) => Box::new(func),
+            _ => unreachable!("found uncallable stmt"), // TODO is this really unreachable?
         };
 
-        self.call(callee, arguments?)
+        callable.call(self, &arguments?)
     }
 
     fn visit_func_declaration(
@@ -326,21 +287,23 @@ impl<R: BufRead, W: Write> Visitor for Interpreter<R, W> {
     ) -> Self::Value {
         let Identifier { name } = name;
 
-        let func = LoxValue::Callable(Callable::Function {
+        let func = LoxValue::Function(Function {
             name: name.clone(),
             parameters: parameters.into_iter().map(|i| i.name).collect(),
             body,
-            closure: (*self.env).clone(),
+            closure: self.env.clone(),
         });
 
-        self.env_define(name, func);
+        self.env.define(name, Some(func));
 
         Ok(LoxValue::Nil)
     }
 
     fn visit_return_stmt(&mut self, expr: Option<Expr>) -> Self::Value {
         let ret_val = expr.map_or(Ok(LoxValue::Nil), |expr| self.visit_expr(expr))?;
-        Err(EvalError::InternalReturn(ret_val))
+        self.ret_val = Some(ret_val.clone());
+
+        Ok(ret_val)
     }
 
     fn visit_class_delcaration(
@@ -451,12 +414,12 @@ mod tests {
 
         let mut interpreter = Interpreter::new(mock_reader, &mut writer);
 
-        interpreter.env_define("n", LoxValue::Int(123));
+        interpreter.env.define("n", Some(LoxValue::Int(123)));
 
-        let mut captured_env = interpreter.env.borrow_mut().clone();
+        let mut captured_env = interpreter.env.clone();
 
-        captured_env.assign("n", LoxValue::Int(456));
+        captured_env.assign("n", Some(LoxValue::Int(456)));
 
-        assert_ne!(interpreter.env.borrow_mut().get("n"), captured_env.get("n"));
+        assert_ne!(interpreter.env.get("n"), captured_env.get("n"));
     }
 }

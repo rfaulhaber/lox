@@ -1,5 +1,6 @@
 use std::{
     cmp::Ordering,
+    collections::HashMap,
     fmt::Display,
     ops::{Add, Div, Mul, Sub},
 };
@@ -195,7 +196,7 @@ pub struct Function {
     pub name: String,
     pub parameters: Vec<String>,
     pub body: Stmt,
-    pub closure: Box<Env>,
+    pub closure: Env,
 }
 
 impl Function {
@@ -210,7 +211,29 @@ impl<R: std::io::BufRead, W: std::fmt::Write> Callable<R, W> for Function {
     }
 
     fn call(&self, interpreter: &mut Interpreter<R, W>, args: &[LoxValue]) -> EvalResult {
-        todo!()
+        let args_env: HashMap<String, Option<LoxValue>> = self
+            .parameters
+            .iter()
+            .zip(args.iter())
+            .map(|(param, arg)| (param.clone(), Some(arg.clone())))
+            .collect();
+
+        let current_env = interpreter.env.clone();
+        let current_ret = interpreter.ret_val.clone();
+
+        let mut env = self.closure.clone();
+        env.values.extend(current_env.values.clone());
+        env.values.extend(args_env);
+
+        interpreter.env = env;
+
+        let res = interpreter.eval_call(self.body.clone())?;
+
+        interpreter.env = current_env;
+
+        interpreter.ret_val = current_ret;
+
+        Ok(res)
     }
 
     fn name(&self) -> &str {

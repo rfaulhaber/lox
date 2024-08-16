@@ -208,8 +208,12 @@ impl<'p> Parser<'p> {
 
         let body = self.parse_stmt()?;
 
-        let body_with_modified_inc = inc.map_or(body.clone(), |inc_expr| {
-            Stmt::Block(vec![Decl::Stmt(body), Decl::Stmt(Stmt::Expr(inc_expr))])
+        let body_with_modified_inc = inc.map_or(body.clone(), |inc_expr| match body {
+            Stmt::Block(mut block) => {
+                block.push(Decl::Stmt(Stmt::Expr(inc_expr)));
+                Stmt::Block(block)
+            }
+            b => Stmt::Block(vec![Decl::Stmt(b), Decl::Stmt(Stmt::Expr(inc_expr))]),
         });
 
         let cond_or_true = cond.unwrap_or(Expr::Literal(Literal::Bool(true)));
@@ -996,6 +1000,46 @@ mod tests {
                 },
                 Box::new(Expr::Var(Identifier { name: "ham".into() })),
             )))],
+        };
+
+        assert_eq!(result.unwrap(), expected);
+    }
+
+    #[test]
+    #[ignore]
+    fn parse_for_stmt() {
+        let input = "for (var i = 0; i < 20; i = i + 1) { print fib(i); }";
+
+        let result = Parser::new(Lexer::new(input)).parse();
+
+        let expected = Program {
+            declarations: vec![Decl::Stmt(Stmt::Block(vec![
+                Decl::Var(
+                    Identifier { name: "i".into() },
+                    Some(Expr::Literal(Literal::Number(Number::Int(0)))),
+                ),
+                Decl::Stmt(Stmt::While(
+                    Expr::Binary(
+                        Box::new(Expr::Var(Identifier { name: "i".into() })),
+                        BinaryOperator::Lt,
+                        Box::new(Expr::Literal(Literal::Number(Number::Int(20)))),
+                    ),
+                    Box::new(Stmt::Block(vec![
+                        Decl::Stmt(Stmt::Block(vec![Decl::Stmt(Stmt::Print(Expr::Call(
+                            Box::new(Expr::Var(Identifier { name: "fib".into() })),
+                            vec![Expr::Var(Identifier { name: "i".into() })],
+                        )))])),
+                        Decl::Stmt(Stmt::Expr(Expr::Assignment(
+                            Identifier { name: "i".into() },
+                            Box::new(Expr::Binary(
+                                Box::new(Expr::Var(Identifier { name: "i".into() })),
+                                BinaryOperator::Add,
+                                Box::new(Expr::Literal(Literal::Number(Number::Int(1)))),
+                            )),
+                        ))),
+                    ])),
+                )),
+            ]))],
         };
 
         assert_eq!(result.unwrap(), expected);
