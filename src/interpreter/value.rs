@@ -31,13 +31,14 @@ macro_rules! binary_number_arithmetic_impl {
     };
 }
 
-pub trait Callable<R, W>
+pub trait Callable<R, W, S>
 where
     R: std::io::BufRead,
     W: std::fmt::Write,
+    S: miette::SourceCode + 'static,
 {
     fn arity(&self) -> u8;
-    fn call(&self, interpreter: &mut Interpreter<R, W>, args: &[LoxValue]) -> EvalResult;
+    fn call(&self, interpreter: &mut Interpreter<R, W, S>, args: &[LoxValue]) -> EvalResult;
     fn name(&self) -> &str;
 }
 
@@ -177,12 +178,14 @@ pub struct NativeFunction {
     pub function: fn(&[LoxValue]) -> EvalResult,
 }
 
-impl<R: std::io::BufRead, W: std::fmt::Write> Callable<R, W> for NativeFunction {
+impl<R: std::io::BufRead, W: std::fmt::Write, S: miette::SourceCode + 'static> Callable<R, W, S>
+    for NativeFunction
+{
     fn arity(&self) -> u8 {
         self.arity
     }
 
-    fn call(&self, _: &mut Interpreter<R, W>, args: &[LoxValue]) -> EvalResult {
+    fn call(&self, _: &mut Interpreter<R, W, S>, args: &[LoxValue]) -> EvalResult {
         (self.function)(args)
     }
 
@@ -205,12 +208,14 @@ impl Function {
     }
 }
 
-impl<R: std::io::BufRead, W: std::fmt::Write> Callable<R, W> for Function {
+impl<R: std::io::BufRead, W: std::fmt::Write, S: miette::SourceCode + 'static> Callable<R, W, S>
+    for Function
+{
     fn arity(&self) -> u8 {
         Function::arity(&self)
     }
 
-    fn call(&self, interpreter: &mut Interpreter<R, W>, args: &[LoxValue]) -> EvalResult {
+    fn call(&self, interpreter: &mut Interpreter<R, W, S>, args: &[LoxValue]) -> EvalResult {
         let args_env: HashMap<String, Option<LoxValue>> = self
             .parameters
             .iter()
@@ -225,13 +230,17 @@ impl<R: std::io::BufRead, W: std::fmt::Write> Callable<R, W> for Function {
         env.values.extend(current_env.values.clone());
         env.values.extend(args_env);
 
+        interpreter
+            .backtrace
+            .push(format!("{:?}({:?})", self.name, args));
+
         interpreter.env = env;
 
         let res = interpreter.eval_call(self.body.clone())?;
 
         interpreter.env = current_env;
-
         interpreter.ret_val = current_ret;
+        interpreter.backtrace.pop();
 
         Ok(res)
     }

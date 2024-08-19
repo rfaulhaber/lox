@@ -16,6 +16,10 @@ macro_rules! make_interpreter_test_inner {
 
         let result = interpreter.eval(ast);
 
+        if !result.is_ok() {
+            println!("interpreter backtrace: {:?}", interpreter.backtrace());
+        }
+
         assert!(result.is_ok(), "received err result: {:?}", result);
 
         let output = interpreter.output();
@@ -34,7 +38,11 @@ macro_rules! make_interpreter_test_inner {
 
         let result = interpreter.eval(ast);
 
-        assert!(result.is_ok());
+        if !result.is_ok() {
+            println!("interpreter backtrace: {:?}", interpreter.backtrace());
+        }
+
+        assert!(result.is_ok(), "received err result: {:?}", result);
 
         let output = interpreter.output();
 
@@ -76,10 +84,8 @@ macro_rules! make_interpreter_test {
 }
 
 pub struct TestCase<'t> {
-    pub name: String,
-    pub code: String,
     pub expected: String,
-    pub interpreter: Interpreter<&'t [u8], String>,
+    pub interpreter: Interpreter<&'t [u8], String, String>,
     pub ast: Program,
 }
 
@@ -98,19 +104,17 @@ impl<'t> TestCase<'t> {
         let mut code_file = File::open(code_path)?;
         let mut expected_file = File::open(expected_path)?;
 
-        let interpreter = Interpreter::new(&b""[..], String::new());
-
         let mut code = String::new();
         let mut expected = String::new();
 
         code_file.read_to_string(&mut code)?;
         expected_file.read_to_string(&mut expected)?;
 
+        let interpreter = Interpreter::new(&b""[..], String::new(), code.clone(), name);
+
         let ast = Parser::from_source(&code).parse()?;
 
         Ok(Self {
-            name: name.into(),
-            code,
             expected,
             ast,
             interpreter,

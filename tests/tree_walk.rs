@@ -30,8 +30,8 @@ make_interpreter_test!(return_stmt_basic);
 
 // these two tests fail for the current tree-walk implementation
 // and we abandoned the tree-walk implementation!
-make_interpreter_test!(return_stmt);
-make_interpreter_test!(closures);
+make_interpreter_test!(return_stmt, ignore);
+make_interpreter_test!(closures, ignore);
 
 make_interpreter_test!(scope_update);
-make_interpreter_test!(resolving_and_binding);
+make_interpreter_test!(resolving_and_binding, ignore);

@@ -19,24 +19,30 @@ use super::{
 };
 
 // TODO implement builder pattern?
-pub struct Interpreter<R, W>
+pub struct Interpreter<R, W, S>
 where
     R: BufRead,
     W: Write,
+    S: miette::SourceCode + 'static,
 {
     reader: R,
     writer: W,
     pub(super) env: Env,
     pub(super) ret_val: Option<LoxValue>,
+
+    source: miette::NamedSource<S>,
+    pub(super) backtrace: Vec<String>,
 }
 
-impl<R: BufRead, W: Write> Interpreter<R, W> {
-    pub fn new(reader: R, writer: W) -> Self {
+impl<R: BufRead, W: Write, S: miette::SourceCode + 'static> Interpreter<R, W, S> {
+    pub fn new(reader: R, writer: W, source: S, source_name: impl AsRef<str>) -> Self {
         Self {
             reader,
             writer,
             env: Env::new_with_builtins(),
             ret_val: None,
+            source: miette::NamedSource::new(source_name, source),
+            backtrace: vec!["toplevel".into()],
         }
     }
 
@@ -52,12 +58,16 @@ impl<R: BufRead, W: Write> Interpreter<R, W> {
         self.writer.borrow()
     }
 
+    pub fn backtrace(&self) -> Vec<String> {
+        self.backtrace.clone()
+    }
+
     pub(super) fn eval_call(&mut self, stmt: Stmt) -> EvalResult {
         self.visit_stmt(stmt)
     }
 }
 
-impl<R: BufRead, W: Write> Visitor for Interpreter<R, W> {
+impl<R: BufRead, W: Write, S: miette::SourceCode> Visitor for Interpreter<R, W, S> {
     type Value = EvalResult;
 
     fn visit_program(&mut self, program: Program) -> Self::Value {
@@ -73,12 +83,9 @@ impl<R: BufRead, W: Write> Visitor for Interpreter<R, W> {
         match stmt {
             Stmt::Expr(expr) => self.visit_expr(expr),
             Stmt::Print(expr) => {
-                let expr = self.visit_expr(expr);
+                let expr = self.visit_expr(expr)?;
 
-                let output = match expr {
-                    Ok(ref val) => format!("{}", val),
-                    Err(ref e) => format!("{}", e),
-                };
+                let output = format!("{}", expr);
 
                 writeln!(self.writer, "{}", output).unwrap();
 
@@ -270,13 +277,15 @@ impl<R: BufRead, W: Write> Visitor for Interpreter<R, W> {
             .map(|expr| Ok(self.visit_expr(expr)?))
             .collect();
 
-        let callable: Box<dyn Callable<R, W>> = match callee_val {
+        let callable: Box<dyn Callable<R, W, S>> = match callee_val {
             LoxValue::Native(native) => Box::new(native),
             LoxValue::Function(func) => Box::new(func),
             _ => unreachable!("found uncallable stmt"), // TODO is this really unreachable?
         };
 
-        callable.call(self, &arguments?)
+        let res = callable.call(self, &arguments?);
+
+        res
     }
 
     fn visit_func_declaration(
@@ -339,80 +348,90 @@ mod tests {
 
     use super::*;
 
-    #[test]
-    fn eval_trivial() {
-        let ast = Parser::new(Lexer::new("print -123 * (45.67);"))
-            .parse()
-            .unwrap();
+    struct TestEnv<R, W, S>
+    where
+        R: BufRead,
+        W: Write,
+        S: miette::SourceCode + 'static,
+    {
+        source: S,
+        interpreter: Interpreter<R, W, S>,
+        program: Program,
+    }
+
+    fn setup(source: &str) -> TestEnv<Box<&[u8]>, String, &str> {
+        let program = Parser::new(Lexer::new(source)).parse().unwrap();
 
         let mock_reader = Box::new(&b""[..]);
 
-        let mut writer = String::new();
+        let writer = String::new();
 
-        let mut interpreter = Interpreter::new(mock_reader, &mut writer);
+        let interpreter = Interpreter::new(mock_reader, writer, source, "source");
 
-        let result = interpreter.eval(ast);
+        TestEnv {
+            source,
+            interpreter,
+            program,
+        }
+    }
+
+    #[test]
+    fn eval_trivial() {
+        let source = "print -123 * (45.67);";
+
+        let TestEnv {
+            mut interpreter,
+            program,
+            ..
+        } = setup(source);
+
+        let result = interpreter.eval(program);
 
         assert!(matches!(result, Ok(LoxValue::Nil)));
-
-        assert_eq!(writer.trim(), "-5617.41");
+        assert_eq!(interpreter.output().trim(), "-5617.41");
     }
 
     #[test]
     fn eval_variable() {
-        let ast = Parser::new(Lexer::new(
-            std::str::from_utf8(b"var test = \"hello world\";\nprint test;").unwrap(),
-        ))
-        .parse()
-        .unwrap();
+        let source = std::str::from_utf8(b"var test = \"hello world\";\nprint test;").unwrap();
 
-        let mock_reader = Box::new(&b""[..]);
+        let TestEnv {
+            mut interpreter,
+            program,
+            ..
+        } = setup(source);
 
-        let mut writer = String::new();
-
-        let mut interpreter = Interpreter::new(mock_reader, &mut writer);
-
-        let result = interpreter.eval(ast);
+        let result = interpreter.eval(program);
 
         assert!(matches!(result, Ok(LoxValue::Nil)));
-
-        assert_eq!(writer.trim(), "\"hello world\"");
+        assert_eq!(interpreter.output().trim(), "\"hello world\"");
     }
 
     #[test]
     fn string_concat() {
-        let ast = Parser::new(Lexer::new(
-            std::str::from_utf8(b"var test = \"hello\" + \" \" + \"world\";\nprint test;").unwrap(),
-        ))
-        .parse()
-        .unwrap();
+        let source =
+            std::str::from_utf8(b"var test = \"hello\" + \" \" + \"world\";\nprint test;").unwrap();
 
-        let mock_reader = Box::new(&b""[..]);
+        let TestEnv {
+            mut interpreter,
+            program,
+            ..
+        } = setup(source);
 
-        let mut writer = String::new();
-
-        let mut interpreter = Interpreter::new(mock_reader, &mut writer);
-
-        let result = interpreter.eval(ast);
+        let result = interpreter.eval(program);
 
         assert!(matches!(result, Ok(LoxValue::Nil)));
-
-        assert_eq!(writer.trim(), "\"hello world\"");
+        assert_eq!(interpreter.output().trim(), "\"hello world\"");
     }
 
     #[test]
     fn capture_env() {
-        let ast = Parser::new(Lexer::new(
-            std::str::from_utf8(b"var test = \"hello\" + \" \" + \"world\";\nprint test;").unwrap(),
-        ))
-        .parse()
-        .unwrap();
+        let source =
+            std::str::from_utf8(b"var test = \"hello\" + \" \" + \"world\";\nprint test;").unwrap();
 
-        let mock_reader = Box::new(&b""[..]);
-
-        let mut writer = String::new();
-
-        let mut interpreter = Interpreter::new(mock_reader, &mut writer);
+        let TestEnv {
+            mut interpreter, ..
+        } = setup(source);
 
         interpreter.env.define("n", Some(LoxValue::Int(123)));
 
@@ -421,5 +440,28 @@ mod tests {
         captured_env.assign("n", Some(LoxValue::Int(456)));
 
         assert_ne!(interpreter.env.get("n"), captured_env.get("n"));
+    }
+
+    #[test]
+    #[ignore]
+    fn fib_eval() {
+        let source = r#"fun count(n) {
+  if (n > 1) count(n - 1);
+  print n;
+}
+
+count(3);
+"#;
+
+        let TestEnv {
+            mut interpreter,
+            program,
+            ..
+        } = setup(source);
+
+        let result = interpreter.eval(program);
+
+        assert_eq!(result, Ok(LoxValue::Nil));
+        assert_eq!(interpreter.output().trim(), "1\n2\n3");
     }
 }
