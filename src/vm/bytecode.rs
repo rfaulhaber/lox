@@ -1,5 +1,5 @@
 #[derive(Debug)]
-pub enum OpCode {
+pub enum Op {
     Constant,
     Return,
 }
@@ -11,9 +11,8 @@ pub enum Value {
 
 #[derive(Debug)]
 pub struct Chunk {
-    code: Vec<OpCode>,
+    code: Vec<(Op, usize)>,
     consts: Vec<Value>,
-    lines: Vec<usize>,
 }
 
 impl Default for Chunk {
@@ -31,7 +30,7 @@ impl Chunk {
         }
     }
 
-    pub(super) fn write(&mut self, code: OpCode, line: usize) {
+    pub(super) fn write(&mut self, code: Op, line: usize) {
         self.code.push(code);
         self.lines.push(line);
     }
@@ -41,7 +40,7 @@ impl Chunk {
         self.consts.len() - 1
     }
 
-    pub(super) fn code_at(&self, index: usize) -> Option<&OpCode> {
+    pub(super) fn code_at(&self, index: usize) -> Option<&Op> {
         self.code.get(index)
     }
 

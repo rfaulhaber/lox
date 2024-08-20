@@ -223,24 +223,25 @@ impl<R: std::io::BufRead, W: std::fmt::Write, S: miette::SourceCode + 'static> C
             .map(|(param, arg)| (param.clone(), Some(arg.clone())))
             .collect();
 
-        let current_env = interpreter.env.clone();
         let current_ret = interpreter.ret_val.clone();
+        let current_env = interpreter.env.clone();
 
-        let mut env = self.closure.clone();
-        env.values.extend(current_env.values.clone());
+        let mut env = Env::with_enclosing(self.closure.clone());
         env.values.extend(args_env);
 
         interpreter
             .backtrace
             .push(format!("{:?}({:?})", self.name, args));
 
+        interpreter.ret_val = None;
         interpreter.env = env;
 
         let res = interpreter.eval_call(self.body.clone())?;
 
-        interpreter.env = current_env;
         interpreter.ret_val = current_ret;
         interpreter.backtrace.pop();
+
+        interpreter.env = current_env;
 
         Ok(res)
     }

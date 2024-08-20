@@ -31,6 +31,7 @@
       pkgs = import nixpkgs {
         inherit system;
         overlays = [dartOverlay];
+        config.allowUnfree = true;
       };
       projectName = "lox";
     in rec {
@@ -58,6 +59,7 @@
           rustup
 
           lldb
+          gdb
 
           # for canonical tests
           zulu

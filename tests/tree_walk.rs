@@ -2,6 +2,9 @@ mod tests;
 
 use crate::tests::TestCase;
 
+// tree walk implementation was abandoned, and most of the tests don't work
+// so most of them are ignored
+
 make_interpreter_test!(assignments);
 make_interpreter_test!(basic_statements);
 make_interpreter_test!(reassignment);
@@ -28,10 +31,8 @@ make_interpreter_test!(builtin_call, |output: &String| {
 make_interpreter_test!(basic_function_call);
 make_interpreter_test!(return_stmt_basic);
 
-// these two tests fail for the current tree-walk implementation
-// and we abandoned the tree-walk implementation!
-make_interpreter_test!(return_stmt, ignore);
-make_interpreter_test!(closures, ignore);
+make_interpreter_test!(return_stmt);
+make_interpreter_test!(closures);
 
 make_interpreter_test!(scope_update);
-make_interpreter_test!(resolving_and_binding, ignore);
+make_interpreter_test!(resolving_and_binding);

@@ -138,8 +138,10 @@ impl<R: BufRead, W: Write, S: miette::SourceCode> Visitor for Interpreter<R, W, 
             .last()
             .unwrap_or(Ok(LoxValue::Nil));
 
-        if let Some(env) = self.env.enclosing.clone() {
-            self.env = *env;
+        if self.env.enclosing.is_some() {
+            self.env = *self.env.enclosing.clone().unwrap(); // clunky
+        } else {
+            self.env.enclosing = None;
         }
 
         result
@@ -437,7 +439,7 @@ mod tests {
 
         let mut captured_env = interpreter.env.clone();
 
-        captured_env.assign("n", Some(LoxValue::Int(456)));
+        let _ = captured_env.assign("n", Some(LoxValue::Int(456)));
 
         assert_ne!(interpreter.env.get("n"), captured_env.get("n"));
     }
