@@ -1,5 +1,4 @@
 use crate::tree_walk::error::EvalError;
-use crate::tree_walk::value::LoxValue;
 
 mod env;
 mod error;
@@ -7,5 +6,6 @@ mod interpreter;
 mod value;
 
 pub use interpreter::Interpreter;
+pub use value::{Function, LoxValue, NativeFunction};
 
 pub type EvalResult = Result<LoxValue, EvalError>;

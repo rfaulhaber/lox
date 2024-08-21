@@ -1,3 +1,4 @@
+use crate::builtins;
 use std::collections::HashMap;
 
 use super::{value::NativeFunction, EvalError, LoxValue};
@@ -24,7 +25,7 @@ impl Env {
     pub fn new_with_builtins() -> Self {
         let mut env = Env::new();
 
-        for builtin_fn in builtins() {
+        for builtin_fn in builtins::builtins() {
             env.define(builtin_fn.name.clone(), Some(LoxValue::Native(builtin_fn)));
         }
 
@@ -88,18 +89,6 @@ impl Env {
             values: HashMap::new(),
         }
     }
-}
-
-fn builtins() -> [NativeFunction; 1] {
-    [NativeFunction {
-        name: String::from("clock"),
-        arity: 0,
-        function: |_args: &[LoxValue]| {
-            Ok(LoxValue::Int(
-                chrono::offset::Local::now().timestamp_millis(),
-            ))
-        },
-    }]
 }
 
 #[cfg(test)]
