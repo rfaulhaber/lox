@@ -1,9 +1,9 @@
 use anyhow::Result;
-use lox::interpreter::Interpreter;
+use lox::tree_walk::Interpreter;
 use lox::{parser::ast::program::Program, parser::Parser};
 
 #[macro_export]
-macro_rules! make_interpreter_test_inner {
+macro_rules! make_tree_walk_test_inner {
     ($name:ident) => {
         let test_case = TestCase::new(stringify!($name)).unwrap();
 
@@ -51,11 +51,11 @@ macro_rules! make_interpreter_test_inner {
 }
 
 #[macro_export]
-macro_rules! make_interpreter_test {
+macro_rules! make_tree_walk_test {
     ($name:ident) => {
         #[test]
         fn $name() {
-            make_interpreter_test_inner!($name);
+            make_tree_walk_test_inner!($name);
         }
     };
 
@@ -63,14 +63,14 @@ macro_rules! make_interpreter_test {
         #[test]
         #[ignore]
         fn $name() {
-            make_interpreter_test_inner!($name);
+            make_tree_walk_test_inner!($name);
         }
     };
 
     ($name:ident, $override:expr) => {
         #[test]
         fn $name() {
-            make_interpreter_test_inner!($name, $override);
+            make_tree_walk_test_inner!($name, $override);
         }
     };
 
@@ -78,7 +78,7 @@ macro_rules! make_interpreter_test {
         #[test]
         #[ignore]
         fn $name() {
-            make_interpreter_test_inner!($name, $override);
+            make_tree_walk_test_inner!($name, $override);
         }
     };
 }

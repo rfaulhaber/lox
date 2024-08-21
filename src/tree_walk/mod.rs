@@ -1,5 +1,5 @@
-use crate::interpreter::error::EvalError;
-use crate::interpreter::value::LoxValue;
+use crate::tree_walk::error::EvalError;
+use crate::tree_walk::value::LoxValue;
 
 mod env;
 mod error;

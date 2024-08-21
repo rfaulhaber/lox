@@ -1,7 +1,5 @@
 use std::collections::HashMap;
 
-use crate::interpreter::value::Callable;
-
 use super::{value::NativeFunction, EvalError, LoxValue};
 
 #[derive(Debug, Clone, PartialEq)]

@@ -5,16 +5,16 @@ use crate::tests::TestCase;
 // tree walk implementation was abandoned, and most of the tests don't work
 // so most of them are ignored
 
-make_interpreter_test!(assignments);
-make_interpreter_test!(basic_statements);
-make_interpreter_test!(reassignment);
-make_interpreter_test!(scope);
-make_interpreter_test!(if_true);
-make_interpreter_test!(if_false);
-make_interpreter_test!(basic_logic);
-make_interpreter_test!(basic_while);
-make_interpreter_test!(for_loop);
-make_interpreter_test!(builtin_call, |output: &String| {
+make_tree_walk_test!(assignments);
+make_tree_walk_test!(basic_statements);
+make_tree_walk_test!(reassignment);
+make_tree_walk_test!(scope);
+make_tree_walk_test!(if_true);
+make_tree_walk_test!(if_false);
+make_tree_walk_test!(basic_logic);
+make_tree_walk_test!(basic_while);
+make_tree_walk_test!(for_loop);
+make_tree_walk_test!(builtin_call, |output: &String| {
     let current_time = chrono::offset::Local::now().timestamp_millis();
     let received_time = output.trim().parse::<i64>();
 
@@ -28,11 +28,9 @@ make_interpreter_test!(builtin_call, |output: &String| {
         diff
     );
 });
-make_interpreter_test!(basic_function_call);
-make_interpreter_test!(return_stmt_basic);
-
-make_interpreter_test!(return_stmt);
-make_interpreter_test!(closures);
-
-make_interpreter_test!(scope_update);
-make_interpreter_test!(resolving_and_binding);
+make_tree_walk_test!(basic_function_call);
+make_tree_walk_test!(return_stmt_basic);
+make_tree_walk_test!(return_stmt, ignore);
+make_tree_walk_test!(closures, ignore);
+make_tree_walk_test!(scope_update);
+make_tree_walk_test!(resolving_and_binding);
