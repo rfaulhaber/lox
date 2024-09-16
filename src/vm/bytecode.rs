@@ -1,23 +1,14 @@
-use std::fmt::Display;
+use super::value::Value;
 
 #[derive(Debug, Clone)]
 pub enum Op {
     Constant(usize),
     Return,
     Negate,
-}
-
-#[derive(Debug, Clone)]
-pub enum Value {
-    Float(f64),
-}
-
-impl Display for Value {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Value::Float(float) => write!(f, "{}", float),
-        }
-    }
+    Add,
+    Subtract,
+    Multiply,
+    Divide,
 }
 
 #[derive(Debug, Clone)]
@@ -87,6 +78,10 @@ impl Chunk {
                     ),
                     Op::Return => "OP_RETURN".into(),
                     Op::Negate => "OP_NEAGATE".into(),
+                    Op::Add => "OP_ADD".into(),
+                    Op::Subtract => "OP_SUBTRACT".into(),
+                    Op::Multiply => "OP_MULTIPLY".into(),
+                    Op::Divide => "OP_DIVIDE".into(),
                 };
 
                 format!("{:04}    {:<20}    line {}", idx, formatted_op, source.line)
