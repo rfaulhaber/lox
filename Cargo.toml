@@ -6,12 +6,17 @@ edition = "2021"
 [[bin]]
 name = "rlox"
 
+
+[[bin]]
+name = "rclox"
+
 [dependencies]
 anyhow = "1"
 miette = { version = "7.2", features = ["fancy"] }
-rustyline = "12"
+rustyline = "14"
 thiserror = "1"
 chrono = "0.4.38"
+clap = { version = "4.5.18", features = ["derive"] }
 
 [dev-dependencies]
 pretty_assertions = "1.4.0"
