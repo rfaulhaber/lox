@@ -163,7 +163,7 @@ fn is_single_or_double_symbol(c: char) -> bool {
 }
 
 #[cfg(test)]
-mod tests {
+mod scanner_tests {
     use super::*;
 
     #[test]

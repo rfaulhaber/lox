@@ -6,7 +6,6 @@ edition = "2021"
 [[bin]]
 name = "rlox"
 
-
 [[bin]]
 name = "rclox"
 
