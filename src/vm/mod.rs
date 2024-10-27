@@ -1,11 +1,10 @@
 use std::ops::{Add, Div, Mul, Sub};
 
-use bytecode::{Chunk, Op, Source};
+use crate::value::Value;
+use bytecode::{Context, Op, Source};
 use thiserror::Error;
-use value::Value;
 
-mod bytecode;
-mod value;
+pub(crate) mod bytecode;
 
 pub type InterpretResult = Result<(), InterpreterError>;
 
@@ -33,7 +32,7 @@ enum BinaryOp {
 
 #[derive(Debug)]
 pub struct Interpreter {
-    chunk: Chunk,
+    chunk: Context,
     ip: usize,
     stack: Vec<Value>,
     mode: InterpreterMode,
@@ -52,7 +51,7 @@ impl Interpreter {
         self.mode = mode;
     }
 
-    pub fn eval(&mut self, chunk: Chunk) -> InterpretResult {
+    pub fn eval(&mut self, chunk: Context) -> InterpretResult {
         self.chunk = chunk;
         self.ip = 0;
 
@@ -61,7 +60,7 @@ impl Interpreter {
 
     fn new_vm(mode: InterpreterMode) -> Self {
         Interpreter {
-            chunk: Chunk::new(),
+            chunk: Context::new(),
             ip: 0,
             stack: Vec::new(),
             mode,
@@ -183,7 +182,7 @@ mod test {
 
     #[test]
     fn stack_calculation() {
-        let mut code = Chunk::new();
+        let mut code = Context::new();
         code.add_const(Value::Float(1.2));
         code.add_const(Value::Float(3.4));
 

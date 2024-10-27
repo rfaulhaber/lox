@@ -1,5 +1,5 @@
 #[derive(Debug, Clone)]
-pub(super) struct Scanner<'s> {
+pub struct Scanner<'s> {
     input: &'s str,
     pos: usize,
 }

@@ -59,7 +59,6 @@
           rustup
 
           lldb
-          gdb
 
           # for canonical tests
           zulu

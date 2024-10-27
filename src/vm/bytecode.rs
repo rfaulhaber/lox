@@ -1,4 +1,4 @@
-use super::value::Value;
+use crate::value::Value;
 
 #[derive(Debug, Clone)]
 pub enum Op {
@@ -27,30 +27,30 @@ impl Source {
 }
 
 #[derive(Debug, Clone)]
-pub struct Chunk {
+pub struct Context {
     pub(super) code: Vec<(Op, Source)>,
     pub(super) consts: Vec<Value>,
 }
 
-impl Default for Chunk {
+impl Default for Context {
     fn default() -> Self {
-        Chunk::new()
+        Context::new()
     }
 }
 
-impl Chunk {
-    pub(super) fn new() -> Self {
-        Chunk {
+impl Context {
+    pub(crate) fn new() -> Self {
+        Context {
             code: Vec::new(),
             consts: Vec::new(),
         }
     }
 
-    pub(super) fn write_code(&mut self, code: Op, line: usize) {
+    pub(crate) fn write_code(&mut self, code: Op, line: usize) {
         self.code.push((code, Source::new(line)));
     }
 
-    pub(super) fn add_const(&mut self, constant: Value) -> usize {
+    pub(crate) fn add_const(&mut self, constant: Value) -> usize {
         let idx = self.consts.len();
         self.consts.push(constant);
 
@@ -87,5 +87,12 @@ impl Chunk {
                 format!("{:04}    {:<20}    line {}", idx, formatted_op, source.line)
             })
             .collect()
+    }
+
+    pub fn merge(&mut self, other: &mut Context) -> &Context {
+        self.code.append(&mut other.code);
+        self.consts.append(&mut other.consts);
+
+        self
     }
 }
