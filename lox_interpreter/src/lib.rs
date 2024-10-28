@@ -1,5 +1,6 @@
-use crate::tree_walk::error::EvalError;
+use crate::error::EvalError;
 
+mod builtins;
 mod env;
 mod error;
 mod interpreter;

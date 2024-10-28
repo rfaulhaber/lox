@@ -1,0 +1,8 @@
+[package]
+name = "lox_vm"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+thiserror = "1"
+lox_source = { path = "../lox_source" }

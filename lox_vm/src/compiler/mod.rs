@@ -1,8 +1,7 @@
 use std::iter::Peekable;
 
-use crate::lexer::lexer::Lexer;
-use crate::lexer::token::TokenType;
 use crate::vm::bytecode::{Context, Op};
+use lox_source::lexer::{token::TokenType, Lexer};
 use thiserror::Error;
 
 #[derive(Debug, Error)]
@@ -24,10 +23,12 @@ impl<'c> Compiler<'c> {
     pub fn compile(&mut self) -> CompilerResult {
         let mut chunk = Context::new();
 
-        while self.lexer.peek().is_some() {
-            let mut result = self.emit()?;
-            chunk.merge(&mut result);
-        }
+        todo!();
+
+        // while self.lexer.peek().is_some() {
+        //     let mut result = self.emit()?;
+        //     chunk.merge(&mut result);
+        // }
 
         Ok(chunk)
     }

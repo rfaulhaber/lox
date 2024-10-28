@@ -1,6 +1,6 @@
-use crate::tree_walk::EvalResult;
-use crate::tree_walk::LoxValue;
-use crate::tree_walk::NativeFunction;
+use super::EvalResult;
+use super::LoxValue;
+use super::NativeFunction;
 
 pub fn clock(_args: &[LoxValue]) -> EvalResult {
     Ok(LoxValue::Int(

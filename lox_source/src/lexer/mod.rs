@@ -1,8 +1,10 @@
+pub mod token;
+
 use crate::source::Span;
 
-use super::{
+use crate::{
+    lexer::token::{Token, TokenType},
     scanner::Scanner,
-    token::{Token, TokenType},
 };
 
 #[derive(Debug)]

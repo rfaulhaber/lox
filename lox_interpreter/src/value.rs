@@ -5,7 +5,7 @@ use std::{
     ops::{Add, Div, Mul, Sub},
 };
 
-use crate::parser::ast::stmt::Stmt;
+use lox_source::ast::stmt::Stmt;
 
 use super::{env::Env, interpreter::Interpreter, EvalError, EvalResult};
 

@@ -1,0 +1,11 @@
+[package]
+name = "lox_interpreter"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+anyhow = "1"
+thiserror = "1"
+lox_source = { path = "../lox_source" }
+miette = { version = "7.2", features = ["fancy"] }
+chrono = "0.4"

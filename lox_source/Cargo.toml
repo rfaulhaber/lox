@@ -1,0 +1,12 @@
+[package]
+name = "lox_source"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+anyhow = "1"
+thiserror = "1"
+miette = { version = "7.2", features = ["fancy"] }
+
+[dev-dependencies]
+pretty_assertions = "1.4"

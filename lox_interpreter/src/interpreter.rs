@@ -1,8 +1,8 @@
-use crate::parser::ast::expr::Number;
+use lox_source::ast::expr::Number;
 use std::borrow::Borrow;
 use std::{fmt::Write, io::BufRead};
 
-use crate::parser::ast::{
+use lox_source::ast::{
     decl::Decl,
     expr::{BinaryOperator, Expr, Identifier, Literal, LogicalOperator, UnaryOperator},
     program::Program,
@@ -346,7 +346,7 @@ fn is_truthy(val: LoxValue) -> LoxValue {
 
 #[cfg(test)]
 mod tests {
-    use crate::{lexer::lexer::Lexer, parser::Parser};
+    use lox_source::{lexer::Lexer, parser::Parser};
 
     use super::*;
 

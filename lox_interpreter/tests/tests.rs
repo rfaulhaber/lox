@@ -1,6 +1,6 @@
 use anyhow::Result;
-use lox::tree_walk::Interpreter;
-use lox::{parser::ast::program::Program, parser::Parser};
+use lox_interpreter::Interpreter;
+use lox_source::{ast::program::Program, parser::Parser};
 
 #[macro_export]
 macro_rules! make_tree_walk_test_inner {

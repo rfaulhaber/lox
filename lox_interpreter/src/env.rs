@@ -1,4 +1,4 @@
-use crate::builtins;
+use super::builtins;
 use std::collections::HashMap;
 
 use super::{value::NativeFunction, EvalError, LoxValue};

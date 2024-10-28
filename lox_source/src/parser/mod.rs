@@ -1,6 +1,4 @@
-pub mod ast;
-
-use self::ast::{
+use super::ast::{
     decl::Decl,
     expr::{BinaryOperator, Expr, Identifier, Literal, LogicalOperator, Number, UnaryOperator},
     program::Program,
@@ -8,8 +6,8 @@ use self::ast::{
 };
 
 use crate::lexer::{
-    lexer::Lexer,
     token::{Token, TokenType},
+    Lexer,
 };
 use std::iter::Peekable;
 use thiserror::Error;
