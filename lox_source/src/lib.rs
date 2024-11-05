@@ -3,3 +3,5 @@ pub mod lexer;
 pub mod parser;
 pub mod scanner;
 pub mod source;
+
+pub use miette;

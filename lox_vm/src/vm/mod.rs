@@ -1,7 +1,8 @@
 use std::ops::{Add, Div, Mul, Sub};
 
 use crate::value::Value;
-use bytecode::{Context, Op, Source};
+use bytecode::{Context, Op};
+use lox_source::source::Span;
 use thiserror::Error;
 
 pub(crate) mod bytecode;
@@ -121,11 +122,11 @@ impl Interpreter {
         Ok(())
     }
 
-    fn next_op(&self) -> (Op, Source) {
+    fn next_op(&self) -> (Op, Span) {
         self.chunk.code[self.ip].clone()
     }
 
-    fn next_op_and_advance(&mut self) -> (Op, Source) {
+    fn next_op_and_advance(&mut self) -> (Op, Span) {
         let op = self.next_op();
 
         self.ip = self.ip + 1;
@@ -180,15 +181,17 @@ impl Default for Interpreter {
 mod test {
     use super::*;
 
+    use lox_source::source::Span;
+
     #[test]
     fn stack_calculation() {
         let mut code = Context::new();
         code.add_const(Value::Float(1.2));
         code.add_const(Value::Float(3.4));
 
-        code.write_code(Op::Constant(0), 0);
-        code.write_code(Op::Constant(1), 0);
-        code.write_code(Op::Add, 0);
+        code.write_code(Op::Constant(0), Span::new(0, 0));
+        code.write_code(Op::Constant(1), Span::new(0, 0));
+        code.write_code(Op::Add, Span::new(0, 0));
 
         let mut vm = Interpreter::new();
         vm.chunk = code;

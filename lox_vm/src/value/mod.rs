@@ -12,3 +12,9 @@ impl Display for Value {
         }
     }
 }
+
+impl From<f64> for Value {
+    fn from(value: f64) -> Self {
+        Value::Float(value)
+    }
+}

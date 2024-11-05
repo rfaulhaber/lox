@@ -1,3 +1,5 @@
+use lox_source::source::Span;
+
 use crate::value::Value;
 
 #[derive(Debug, Clone)]
@@ -12,23 +14,8 @@ pub enum Op {
 }
 
 #[derive(Debug, Clone)]
-pub struct Source {
-    line: usize,
-}
-
-impl Source {
-    pub fn new(line: usize) -> Self {
-        Self { line }
-    }
-
-    pub fn line(&self) -> usize {
-        self.line
-    }
-}
-
-#[derive(Debug, Clone)]
 pub struct Context {
-    pub(super) code: Vec<(Op, Source)>,
+    pub(super) code: Vec<(Op, Span)>,
     pub(super) consts: Vec<Value>,
 }
 
@@ -46,8 +33,8 @@ impl Context {
         }
     }
 
-    pub(crate) fn write_code(&mut self, code: Op, line: usize) {
-        self.code.push((code, Source::new(line)));
+    pub(crate) fn write_code(&mut self, code: Op, location: Span) {
+        self.code.push((code, location));
     }
 
     pub(crate) fn add_const(&mut self, constant: Value) -> usize {
@@ -57,7 +44,7 @@ impl Context {
         idx
     }
 
-    pub(super) fn code_at(&self, index: usize) -> Option<&(Op, Source)> {
+    pub(super) fn code_at(&self, index: usize) -> Option<&(Op, Span)> {
         self.code.get(index)
     }
 
@@ -84,7 +71,10 @@ impl Context {
                     Op::Divide => "OP_DIVIDE".into(),
                 };
 
-                format!("{:04}    {:<20}    line {}", idx, formatted_op, source.line)
+                format!(
+                    "{:04}    {:<20}    offset/length {}/{}",
+                    idx, formatted_op, source.offset, source.length
+                )
             })
             .collect()
     }

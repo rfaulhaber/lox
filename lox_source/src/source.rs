@@ -18,3 +18,12 @@ impl Into<SourceSpan> for Span {
         (self.offset, self.length).into()
     }
 }
+
+impl Span {
+    pub fn new(offset: usize, length: usize) -> Self {
+        Self {
+            offset,
+            length
+        }
+    }
+}
