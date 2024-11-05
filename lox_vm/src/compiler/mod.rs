@@ -16,6 +16,10 @@ pub enum CompilerError {
     #[error("unexpected token {0}, expected {1}")]
     #[diagnostic(code(lox::expected_token))]
     ExpectedToken(String, String),
+
+    #[error("unexpected end of input")]
+    #[diagnostic(code(lox::unexpected_eof))]
+    UnexpectedEndOfInput,
 }
 
 type InnerCompilerResult = Result<(), CompilerError>;
@@ -99,7 +103,8 @@ impl<'c> Compiler<'c> {
     fn unary(&mut self) -> InnerCompilerResult {
         let token = self.lexer.next().unwrap();
 
-        self.parse_precedence(Precedence::Unary)?;
+        todo!();
+        self.parse_precedence(1)?;
 
         match token.kind {
             TokenType::Minus => self.context.write_code(Op::Negate, token.location),
@@ -113,27 +118,25 @@ impl<'c> Compiler<'c> {
         let token = self.lexer.next().unwrap();
 
         todo!();
-
-        let next_precedence = match token.kind {
-            TokenType::Plus =>
-        }
     }
 
     fn expression(&mut self) -> InnerCompilerResult {
-        self.parse_precedence(Precedence::Assignment)?;
+        todo!();
 
         Ok(())
     }
 
-    fn parse_precedence(&mut self, precedence: Precedence) -> InnerCompilerResult {
+    fn parse_precedence(&mut self, precedence: u8) -> InnerCompilerResult {
         let lhs = self.lexer.next();
 
-        match lhs {
-            Some(token) => match token.kind {
-                _ => todo!(),
-            }
-            None => todo!()
+        loop {
+            let op = match self.lexer.next() {
+                Some(token) => todo!(),
+                None => return Err(CompilerError::UnexpectedEndOfInput),
+            };
         }
+
+        Ok(())
     }
 
     fn number(&mut self) -> InnerCompilerResult {
@@ -155,5 +158,48 @@ impl<'c> Compiler<'c> {
         self.context.write_code(Op::Return, token.location);
 
         Ok(())
+    }
+}
+
+fn infix_binding_power(token_type: TokenType) -> (u8, u8) {
+    match token_type {
+        TokenType::LeftParen => todo!(),
+        TokenType::RightParen => todo!(),
+        TokenType::LeftBrace => todo!(),
+        TokenType::RightBrace => todo!(),
+        TokenType::Comma => todo!(),
+        TokenType::Dot => todo!(),
+        TokenType::Minus => todo!(),
+        TokenType::Plus => todo!(),
+        TokenType::Semicolon => todo!(),
+        TokenType::Slash => todo!(),
+        TokenType::Star => todo!(),
+        TokenType::Bang => todo!(),
+        TokenType::BangEqual => todo!(),
+        TokenType::Equal => todo!(),
+        TokenType::EqualEqual => todo!(),
+        TokenType::Greater => todo!(),
+        TokenType::GreaterEqual => todo!(),
+        TokenType::Less => todo!(),
+        TokenType::LessEqual => todo!(),
+        TokenType::Identifier => todo!(),
+        TokenType::String => todo!(),
+        TokenType::Number => todo!(),
+        TokenType::And => todo!(),
+        TokenType::Class => todo!(),
+        TokenType::Else => todo!(),
+        TokenType::False => todo!(),
+        TokenType::Fun => todo!(),
+        TokenType::For => todo!(),
+        TokenType::If => todo!(),
+        TokenType::Nil => todo!(),
+        TokenType::Or => todo!(),
+        TokenType::Print => todo!(),
+        TokenType::Return => todo!(),
+        TokenType::Super => todo!(),
+        TokenType::This => todo!(),
+        TokenType::True => todo!(),
+        TokenType::Var => todo!(),
+        TokenType::While => todo!(),
     }
 }
