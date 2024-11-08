@@ -1,9 +1,7 @@
 [package]
-name = "lox_vm"
+name = "lox_bytecode"
 version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-thiserror = "1"
 lox_source = { path = "../lox_source" }
-lox_bytecode = { path = "../lox_bytecode" }

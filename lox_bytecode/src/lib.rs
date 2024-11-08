@@ -1,7 +1,5 @@
 use lox_source::source::Span;
 
-use crate::value::Value;
-
 #[derive(Debug, Clone)]
 pub enum Op {
     Constant(usize),
@@ -14,42 +12,42 @@ pub enum Op {
 }
 
 #[derive(Debug, Clone)]
-pub struct Context {
-    pub(super) code: Vec<(Op, Span)>,
-    pub(super) consts: Vec<Value>,
+pub struct Chunk {
+    code: Vec<(Op, Span)>,
+    numbers: Vec<f64>,
 }
 
-impl Default for Context {
+impl Default for Chunk {
     fn default() -> Self {
-        Context::new()
+        Chunk::new()
     }
 }
 
-impl Context {
-    pub(crate) fn new() -> Self {
-        Context {
+impl Chunk {
+    pub fn new() -> Self {
+        Chunk {
             code: Vec::new(),
-            consts: Vec::new(),
+            numbers: Vec::new(),
         }
     }
 
-    pub(crate) fn write_code(&mut self, code: Op, location: Span) {
+    pub fn add_op(&mut self, code: Op, location: Span) {
         self.code.push((code, location));
     }
 
-    pub(crate) fn add_const(&mut self, constant: Value) -> usize {
-        let idx = self.consts.len();
-        self.consts.push(constant);
+    pub fn add_number(&mut self, number: f64) -> usize {
+        let idx = self.numbers.len();
+        self.numbers.push(number);
 
         idx
     }
 
-    pub(super) fn code_at(&self, index: usize) -> Option<&(Op, Span)> {
+    fn code_at(&self, index: usize) -> Option<&(Op, Span)> {
         self.code.get(index)
     }
 
-    pub(super) fn constant_at(&self, index: usize) -> Option<&Value> {
-        self.consts.get(index)
+    fn number_at(&self, index: usize) -> Option<f64> {
+        self.numbers.get(index).copied()
     }
 
     pub fn disassemble(&self) -> Vec<String> {
@@ -61,7 +59,7 @@ impl Context {
                     Op::Constant(index) => format!(
                         "OP_CONSTANT (index={}) {}",
                         index,
-                        self.constant_at(*index).unwrap(),
+                        self.number_at(*index).unwrap(),
                     ),
                     Op::Return => "OP_RETURN".into(),
                     Op::Negate => "OP_NEAGATE".into(),
@@ -77,12 +75,5 @@ impl Context {
                 )
             })
             .collect()
-    }
-
-    pub fn merge(&mut self, other: &mut Context) -> &Context {
-        self.code.append(&mut other.code);
-        self.consts.append(&mut other.consts);
-
-        self
     }
 }

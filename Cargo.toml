@@ -21,4 +21,4 @@ members = [
         "lox_source",
         "lox_interpreter",
         "lox_vm"
-]
+, "lox_bytecode", "lox_compiler"]
