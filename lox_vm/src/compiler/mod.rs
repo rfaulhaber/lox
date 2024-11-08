@@ -13,7 +13,7 @@ pub enum CompilerError {
     #[diagnostic(code(lox::invalid_float))]
     InvalidFloat(#[from] std::num::ParseFloatError),
 
-    #[error("unexpected token {0}, expected {1}")]
+    #[error("unexpected token {0}, expected: {1}")]
     #[diagnostic(code(lox::expected_token))]
     ExpectedToken(String, String),
 
@@ -23,39 +23,6 @@ pub enum CompilerError {
 }
 
 type InnerCompilerResult = Result<(), CompilerError>;
-
-#[derive(Debug, PartialEq, Eq, PartialOrd)]
-enum Precedence {
-    None = 0,
-    Assignment = 1,
-    Or = 2,
-    And = 3,
-    Equality = 4,
-    Comparison = 5,
-    Term = 6,
-    Factor = 7,
-    Unary = 8,
-    Call = 9,
-    Primary = 10,
-}
-
-impl Precedence {
-    fn next(self) -> Self {
-        match self {
-            Precedence::None => Precedence::Assignment,
-            Precedence::Assignment => Precedence::Or,
-            Precedence::Or => Precedence::And,
-            Precedence::And => Precedence::Equality,
-            Precedence::Equality => Precedence::Comparison,
-            Precedence::Comparison => Precedence::Term,
-            Precedence::Term => Precedence::Factor,
-            Precedence::Factor => Self::Unary,
-            Precedence::Unary => Precedence::Call,
-            Precedence::Call => Precedence::Primary,
-            Precedence::Primary => Precedence::None,
-        }
-    }
-}
 
 pub struct Compiler<'c> {
     lexer: Peekable<Lexer<'c>>,
@@ -91,6 +58,7 @@ impl<'c> Compiler<'c> {
     }
 
     fn grouping(&mut self) -> InnerCompilerResult {
+        println!("grouping: {:?}", self.lexer);
         let _ = self.lexer.next();
 
         self.expression()?;
@@ -101,10 +69,10 @@ impl<'c> Compiler<'c> {
     }
 
     fn unary(&mut self) -> InnerCompilerResult {
+        println!("unary: {:?}", self.lexer);
         let token = self.lexer.next().unwrap();
 
-        todo!();
-        self.parse_precedence(1)?;
+        self.parse_precedence(8)?;
 
         match token.kind {
             TokenType::Minus => self.context.write_code(Op::Negate, token.location),
@@ -115,31 +83,84 @@ impl<'c> Compiler<'c> {
     }
 
     fn binary(&mut self) -> InnerCompilerResult {
+        println!("binary: {:?}", self.lexer);
         let token = self.lexer.next().unwrap();
 
-        todo!();
+        println!("binary token: {:?}", token);
+
+        self.parse_precedence(4)?;
+
+        match token.kind {
+            TokenType::Plus => self.context.write_code(Op::Add, token.location),
+            TokenType::Minus => self.context.write_code(Op::Subtract, token.location),
+            TokenType::Star => self.context.write_code(Op::Multiply, token.location),
+            TokenType::Slash => self.context.write_code(Op::Divide, token.location),
+            _ => {
+                return Err(CompilerError::ExpectedToken(
+                    token.literal,
+                    "binary operator".into(),
+                ))
+            }
+        };
+
+        Ok(())
     }
 
     fn expression(&mut self) -> InnerCompilerResult {
-        todo!();
+        println!("expression: {:?}", self.lexer);
+        self.parse_precedence(1)?;
 
         Ok(())
     }
 
     fn parse_precedence(&mut self, precedence: u8) -> InnerCompilerResult {
-        let lhs = self.lexer.next();
+        let lhs = self.lexer.peek();
+
+        if lhs.is_none() {
+            return Err(CompilerError::UnexpectedEndOfInput);
+        }
+
+        let lhs = lhs.unwrap();
+        let kind = lhs.kind;
+
+        if kind == TokenType::LeftParen {
+            self.grouping()?;
+        }
+
+        if kind == TokenType::Number {
+            self.number()?;
+        }
+
+        if let Some(((), rhp)) = prefix_precedence(kind) {
+            self.unary()?;
+        }
 
         loop {
-            let op = match self.lexer.next() {
-                Some(token) => todo!(),
-                None => return Err(CompilerError::UnexpectedEndOfInput),
-            };
+            let token = self.lexer.peek();
+
+            if token.is_none() {
+                return Err(CompilerError::UnexpectedEndOfInput);
+            }
+
+            let token = token.unwrap();
+
+            if let Some((lhp, rhp)) = infix_precedence(token.kind) {
+                if lhp < precedence {
+                    break;
+                }
+
+                self.binary()?;
+                continue;
+            }
+
+            break;
         }
 
         Ok(())
     }
 
     fn number(&mut self) -> InnerCompilerResult {
+        println!("number: {:?}", self.lexer);
         let Token {
             literal, location, ..
         } = self.lexer.next().unwrap();
@@ -161,45 +182,41 @@ impl<'c> Compiler<'c> {
     }
 }
 
-fn infix_binding_power(token_type: TokenType) -> (u8, u8) {
+fn infix_precedence(token_type: TokenType) -> Option<(u8, u8)> {
     match token_type {
-        TokenType::LeftParen => todo!(),
-        TokenType::RightParen => todo!(),
-        TokenType::LeftBrace => todo!(),
-        TokenType::RightBrace => todo!(),
-        TokenType::Comma => todo!(),
-        TokenType::Dot => todo!(),
-        TokenType::Minus => todo!(),
-        TokenType::Plus => todo!(),
-        TokenType::Semicolon => todo!(),
-        TokenType::Slash => todo!(),
-        TokenType::Star => todo!(),
-        TokenType::Bang => todo!(),
-        TokenType::BangEqual => todo!(),
-        TokenType::Equal => todo!(),
-        TokenType::EqualEqual => todo!(),
-        TokenType::Greater => todo!(),
-        TokenType::GreaterEqual => todo!(),
-        TokenType::Less => todo!(),
-        TokenType::LessEqual => todo!(),
-        TokenType::Identifier => todo!(),
-        TokenType::String => todo!(),
-        TokenType::Number => todo!(),
-        TokenType::And => todo!(),
-        TokenType::Class => todo!(),
-        TokenType::Else => todo!(),
-        TokenType::False => todo!(),
-        TokenType::Fun => todo!(),
-        TokenType::For => todo!(),
-        TokenType::If => todo!(),
-        TokenType::Nil => todo!(),
-        TokenType::Or => todo!(),
-        TokenType::Print => todo!(),
-        TokenType::Return => todo!(),
-        TokenType::Super => todo!(),
-        TokenType::This => todo!(),
-        TokenType::True => todo!(),
-        TokenType::Var => todo!(),
-        TokenType::While => todo!(),
+        TokenType::Equal => Some((1, 2)),
+        TokenType::Or => Some((2, 3)),
+        TokenType::And => Some((3, 4)),
+        TokenType::EqualEqual | TokenType::BangEqual => Some((4, 5)),
+        TokenType::Less | TokenType::LessEqual | TokenType::Greater | TokenType::GreaterEqual => {
+            Some((5, 6))
+        }
+        TokenType::Plus | TokenType::Minus => Some((6, 7)),
+        TokenType::Star | TokenType::Slash => Some((7, 8)),
+        TokenType::Dot | TokenType::LeftParen => Some((9, 10)),
+        _ => None,
+    }
+}
+
+fn prefix_precedence(token_type: TokenType) -> Option<((), u8)> {
+    match token_type {
+        TokenType::Bang | TokenType::Minus => Some(((), 11)),
+        _ => None,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn precedence_parsing() {
+        let source = "(-1 + 2) * 3 - -4";
+
+        let compiler = Compiler::new(&source);
+
+        let res = compiler.compile().unwrap();
+
+        assert_eq!(res.disassemble(), vec!["foo".to_string()]);
     }
 }

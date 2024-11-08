@@ -7,7 +7,7 @@ pub struct Token {
     pub location: Span,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub enum TokenType {
     LeftParen,
     RightParen,
