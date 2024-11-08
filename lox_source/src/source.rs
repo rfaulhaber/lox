@@ -21,9 +21,6 @@ impl Into<SourceSpan> for Span {
 
 impl Span {
     pub fn new(offset: usize, length: usize) -> Self {
-        Self {
-            offset,
-            length
-        }
+        Self { offset, length }
     }
 }
