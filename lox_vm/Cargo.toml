@@ -7,3 +7,4 @@ edition = "2021"
 thiserror = "1"
 lox_source = { path = "../lox_source" }
 lox_bytecode = { path = "../lox_bytecode" }
+lox_value = { path = "../lox_value" }

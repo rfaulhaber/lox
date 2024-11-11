@@ -1,4 +1,5 @@
 use lox_bytecode;
+use lox_value::{Value, ValueArithmeticError};
 
 use lox_bytecode::{Chunk, Op};
 use lox_source::source::Span;
@@ -12,6 +13,8 @@ pub enum InterpreterError {
     InvalidOperand(String, String),
     #[error("Insufficient stack length for operation {0}: {1}")]
     InsufficientStackLengthForOperation(String, usize),
+    #[error("Arithmetic error")]
+    ArithmeticError(#[from] ValueArithmeticError),
 }
 
 #[derive(Debug)]
@@ -32,7 +35,7 @@ enum BinaryOp {
 pub struct Interpreter {
     chunk: Chunk,
     ip: usize,
-    stack: Vec<u8>,
+    stack: Vec<Value>,
     mode: InterpreterMode,
 }
 
@@ -74,20 +77,12 @@ impl Interpreter {
 
         match op {
             Op::Constant(index) => {
-                let constant = self.chunk.constant_at(index).unwrap().clone();
-                self.stack.push(constant);
+                let constant = self.chunk.number_at(index).unwrap();
+                self.stack.push(Value::from(constant));
             }
             Op::Return => return Ok(()),
             Op::Negate => match self.stack.pop() {
-                Some(n) => match n {
-                    Value::Float(f) => self.stack.push(Value::Float(-f)),
-                    _ => {
-                        return Err(InterpreterError::InvalidOperand(
-                            "negation".into(),
-                            "number".into(),
-                        ))
-                    }
-                },
+                Some(Value::Number(n)) => self.stack.push(Value::Number(-n)),
                 None => unreachable!("negate operation found without operand"),
             },
             Op::Add => {
@@ -120,7 +115,7 @@ impl Interpreter {
     }
 
     fn next_op(&self) -> (Op, Span) {
-        self.chunk.code[self.ip].clone()
+        self.chunk.code_at(self.ip).unwrap().clone()
     }
 
     fn next_op_and_advance(&mut self) -> (Op, Span) {
@@ -150,18 +145,10 @@ impl Interpreter {
         let a = self.stack.pop().unwrap();
 
         let value = match op {
-            BinaryOp::Add => match (a, b) {
-                (Value::Float(l), Value::Float(r)) => Value::Float(l.add(r)),
-            },
-            BinaryOp::Sub => match (a, b) {
-                (Value::Float(l), Value::Float(r)) => Value::Float(l.sub(r)),
-            },
-            BinaryOp::Mul => match (a, b) {
-                (Value::Float(l), Value::Float(r)) => Value::Float(l.mul(r)),
-            },
-            BinaryOp::Div => match (a, b) {
-                (Value::Float(l), Value::Float(r)) => Value::Float(l.div(r)),
-            },
+            BinaryOp::Add => (a + b)?,
+            BinaryOp::Sub => (a - b)?,
+            BinaryOp::Mul => (a * b)?,
+            BinaryOp::Div => (a / b)?,
         };
 
         Ok(value)
@@ -197,6 +184,6 @@ mod test {
         let _ = vm.step();
         let _ = vm.step();
 
-        assert_eq!(vm.stack.first().unwrap(), &Value::Float(4.6));
+        assert_eq!(vm.stack.first().unwrap(), &Value::from(4.6));
     }
 }

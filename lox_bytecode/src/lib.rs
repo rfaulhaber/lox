@@ -13,8 +13,10 @@ pub enum Op {
 
 #[derive(Debug, Clone)]
 pub struct Chunk {
-    code: Vec<(Op, Span)>,
-    numbers: Vec<f64>,
+    code: Vec<Op>,
+    floats: Vec<f64>,
+    ints: Vec<i64>,
+    locations: Vec<(usize, Span)>,
 }
 
 impl Default for Chunk {
@@ -27,39 +29,63 @@ impl Chunk {
     pub fn new() -> Self {
         Chunk {
             code: Vec::new(),
-            numbers: Vec::new(),
+            floats: Vec::new(),
+            ints: Vec::new(),
+            locations: Vec::new(),
         }
     }
 
-    pub fn add_op(&mut self, code: Op, location: Span) {
-        self.code.push((code, location));
+    pub fn add_sourced_op(&mut self, code: Op, location: Span) {
+        let idx = self.code.len();
+        self.code.push(code);
+        self.locations.push((idx, location));
     }
 
-    pub fn add_number(&mut self, number: f64) -> usize {
-        let idx = self.numbers.len();
-        self.numbers.push(number);
+    pub fn add_op(&mut self, code: Op) {
+        self.code.push(code);
+    }
+
+    pub fn add_float(&mut self, number: f64) -> usize {
+        let idx = self.floats.len();
+        self.floats.push(number);
 
         idx
     }
 
-    fn code_at(&self, index: usize) -> Option<&(Op, Span)> {
+    pub fn add_int(&mut self, number: i64) -> usize {
+        let idx = self.floats.len();
+        self.ints.push(number);
+
+        idx
+    }
+
+    pub fn code_at(&self, index: usize) -> Option<&Op> {
         self.code.get(index)
     }
 
-    fn number_at(&self, index: usize) -> Option<f64> {
-        self.numbers.get(index).copied()
+    pub fn float_at(&self, index: usize) -> Option<f64> {
+        self.floats.get(index).copied()
+    }
+
+    pub fn int_at(&self, index: usize) -> Option<i64> {
+        self.ints.get(index).copied()
     }
 
     pub fn disassemble(&self) -> Vec<String> {
         self.code
             .iter()
             .enumerate()
-            .map(|(idx, (op, source))| {
+            .map(|(idx, op)| {
+                let (_, source) = self
+                    .locations
+                    .iter()
+                    .find(|(location, _)| *location == idx)
+                    .unwrap();
                 let formatted_op = match op {
                     Op::Constant(index) => format!(
                         "OP_CONSTANT (index={}) {}",
                         index,
-                        self.number_at(*index).unwrap(),
+                        self.float_at(*index).unwrap(),
                     ),
                     Op::Return => "OP_RETURN".into(),
                     Op::Negate => "OP_NEAGATE".into(),

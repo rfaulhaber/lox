@@ -4,3 +4,6 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
+lox_source = { path = "../lox_source" }
+lox_bytecode = { path = "../lox_bytecode" }
+thiserror = "1"

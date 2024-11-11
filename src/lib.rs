@@ -23,7 +23,7 @@ pub enum UseOption {
 pub fn repl() -> RlResult<()> {
     let mut rl = DefaultEditor::new()?;
 
-    let vm = lox_vm::vm::Interpreter::new();
+    let vm = lox_vm::Interpreter::new();
 
     loop {
         let readline = rl.readline("lox >>");
@@ -52,7 +52,7 @@ pub fn repl() -> RlResult<()> {
 }
 
 fn eval_file(path: String) -> Result<()> {
-    let vm = lox_vm::vm::Interpreter::new();
+    let vm = lox_vm::Interpreter::new();
 
     let mut source_file = std::fs::File::open(path)?;
     let mut source_buf = String::new();

@@ -369,6 +369,11 @@ dependencies = [
 [[package]]
 name = "lox_compiler"
 version = "0.1.0"
+dependencies = [
+ "lox_bytecode",
+ "lox_source",
+ "thiserror",
+]
 
 [[package]]
 name = "lox_interpreter"
@@ -392,11 +397,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "lox_value"
+version = "0.1.0"
+dependencies = [
+ "thiserror",
+]
+
+[[package]]
 name = "lox_vm"
 version = "0.1.0"
 dependencies = [
  "lox_bytecode",
  "lox_source",
+ "lox_value",
  "thiserror",
 ]
 
