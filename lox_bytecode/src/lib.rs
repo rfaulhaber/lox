@@ -77,11 +77,7 @@ impl Chunk {
             .iter()
             .enumerate()
             .map(|(idx, op)| {
-                let (_, source) = self
-                    .locations
-                    .iter()
-                    .find(|(location, _)| *location == idx)
-                    .unwrap();
+                let source = self.locations.iter().find(|(location, _)| *location == idx);
                 let formatted_op = match op {
                     Op::Integer(index) => format!(
                         "OP_INTEGER (index={}) {}",
@@ -101,10 +97,14 @@ impl Chunk {
                     Op::Divide => "OP_DIVIDE".into(),
                 };
 
-                format!(
-                    "{:04}    {:<20}    offset/length {}/{}",
-                    idx, formatted_op, source.offset, source.length
-                )
+                if let Some((_, source)) = source {
+                    return format!(
+                        "{:04}    {:<20}    offset/length {}/{}",
+                        idx, formatted_op, source.offset, source.length
+                    );
+                } else {
+                    return format!("{:04}    {:<20}", idx, formatted_op,);
+                }
             })
             .collect()
     }

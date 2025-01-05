@@ -1,4 +1,4 @@
-use lox_bytecode::Chunk;
+use lox_bytecode::{Chunk, Op};
 use lox_source::{
     ast::{
         decl::Decl,
@@ -68,21 +68,51 @@ impl Visitor for Compiler {
     }
 
     fn visit_unary_expr(&mut self, op: UnaryOperator, expr: Expr) -> Self::Value {
-        todo!()
+        let _ = self.visit_expr(expr)?;
+
+        self.chunk.add_op(Op::Negate);
+
+        Ok(())
     }
 
     fn visit_binary_expr(&mut self, left: Expr, op: BinaryOperator, right: Expr) -> Self::Value {
-        todo!()
+        let _ = self.visit_expr(left)?;
+        let _ = self.visit_expr(right)?;
+
+        let opcode = match op {
+            BinaryOperator::Eq => todo!(),
+            BinaryOperator::Neq => todo!(),
+            BinaryOperator::Lt => todo!(),
+            BinaryOperator::Lte => todo!(),
+            BinaryOperator::Gt => todo!(),
+            BinaryOperator::Gte => todo!(),
+            BinaryOperator::Add => Op::Add,
+            BinaryOperator::Sub => Op::Subtract,
+            BinaryOperator::Mul => Op::Multiply,
+            BinaryOperator::Div => Op::Divide,
+        };
+
+        self.chunk.add_op(opcode);
+
+        Ok(())
     }
 
     fn visit_literal(&mut self, literal: Literal) -> Self::Value {
         match literal {
-            Literal::Number(Number::Float(f)) => todo!(),
-            Literal::Number(Number::Int(i)) => todo!(),
+            Literal::Number(Number::Float(f)) => {
+                let idx = self.chunk.add_float(f);
+                self.chunk.add_op(Op::Float(idx));
+            }
+            Literal::Number(Number::Int(i)) => {
+                let idx = self.chunk.add_int(i);
+                self.chunk.add_op(Op::Integer(idx));
+            }
             Literal::String(_) => todo!(),
             Literal::Bool(_) => todo!(),
             Literal::Nil => todo!(),
-        }
+        };
+
+        Ok(())
     }
 
     fn visit_grouping_expr(&mut self, expr: Expr) -> Self::Value {
@@ -102,11 +132,26 @@ impl Visitor for Compiler {
     }
 
     fn visit_program(&mut self, program: Program) -> Self::Value {
-        todo!()
+        let result = program
+            .declarations
+            .iter()
+            .map(|d| self.visit_declaration(d.clone()))
+            .last();
+
+        result.unwrap_or(Ok(()))
     }
 
     fn visit_declaration(&mut self, decl: Decl) -> Self::Value {
-        todo!()
+        match decl {
+            Decl::Class(id, superclass, funcs) => {
+                self.visit_class_delcaration(id, superclass, funcs)
+            }
+            Decl::Func(name, parameters, body) => {
+                self.visit_func_declaration(name, parameters, body)
+            }
+            Decl::Var(_, _) => todo!(),
+            Decl::Stmt(stmt) => self.visit_stmt(stmt),
+        }
     }
 
     fn visit_class_delcaration(
@@ -119,7 +164,14 @@ impl Visitor for Compiler {
     }
 
     fn visit_stmt(&mut self, stmt: Stmt) -> Self::Value {
-        todo!()
+        match stmt {
+            Stmt::Block(_) => todo!(),
+            Stmt::Expr(expr) => self.visit_expr(expr),
+            Stmt::Print(_) => todo!(),
+            Stmt::Return(_) => todo!(),
+            Stmt::If(_, _, _) => todo!(),
+            Stmt::While(_, _) => todo!(),
+        }
     }
 
     fn visit_block(&mut self, block: Vec<Decl>) -> Self::Value {
@@ -150,5 +202,58 @@ impl Visitor for Compiler {
 
 #[cfg(test)]
 mod test {
+    use lox_bytecode::Op;
+
     use super::*;
+
+    #[test]
+    fn number_literals() {
+        let input = "123;";
+        let mut expected = Chunk::new();
+        expected.add_int(123);
+        expected.add_op(Op::Integer(0));
+
+        let mut compiler = Compiler::new_from_source(input).unwrap();
+        let _ = compiler.compile().unwrap();
+        let result = compiler.bytecode();
+
+        assert_eq!(result.disassemble(), expected.disassemble());
+    }
+
+    #[test]
+    fn grouping() {
+        let input = "(123)";
+        todo!();
+    }
+
+    #[test]
+    fn unary_negation() {
+        let input = "-123";
+        todo!();
+    }
+
+    #[test]
+    fn basic_add() {
+        let input = "123 + 456";
+    }
+
+    #[test]
+    fn basic_sub() {
+        let input = "123 - 456";
+    }
+
+    #[test]
+    fn basic_mul() {
+        let input = "123 * 456";
+    }
+
+    #[test]
+    fn basic_div() {
+        let input = "123 / 456";
+    }
+
+    #[test]
+    fn complex_expressions() {
+        let input = "-(123) + 456 * -789";
+    }
 }
