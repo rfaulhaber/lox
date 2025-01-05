@@ -168,17 +168,15 @@ impl Default for Interpreter {
 mod test {
     use super::*;
 
-    use lox_source::source::Span;
-
     #[test]
     fn stack_calculation() {
         let mut code = Chunk::new();
-        code.add_number(1.2);
-        code.add_number(3.4);
+        code.add_float(1.2);
+        code.add_float(3.4);
 
-        code.add_op(Op::Constant(0), Span::new(0, 0));
-        code.add_op(Op::Constant(1), Span::new(0, 0));
-        code.add_op(Op::Add, Span::new(0, 0));
+        code.add_op(Op::Float(0));
+        code.add_op(Op::Float(1));
+        code.add_op(Op::Add);
 
         let mut vm = Interpreter::new();
         vm.chunk = code;

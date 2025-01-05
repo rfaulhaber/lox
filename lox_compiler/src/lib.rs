@@ -1,8 +1,10 @@
 use lox_bytecode::Chunk;
 use lox_source::{
     ast::{
-        expr::{Expr, Literal, Number},
+        decl::Decl,
+        expr::{BinaryOperator, Expr, Identifier, Literal, LogicalOperator, Number, UnaryOperator},
         program::Program,
+        stmt::Stmt,
         visitor::Visitor,
     },
     parser::{ParseError, Parser},
@@ -23,13 +25,17 @@ pub struct Compiler {
 }
 
 impl<'c> Compiler {
-    pub fn new(source: &'c str) -> Result<Self, CompilerError> {
+    pub fn new(source: Program) -> Self {
+        Self {
+            ast: source,
+            chunk: Chunk::new(),
+        }
+    }
+
+    pub fn new_from_source(source: &'c str) -> Result<Self, CompilerError> {
         let program = Parser::from_source(source).parse()?;
 
-        Ok(Self {
-            ast: program,
-            chunk: Chunk::new(),
-        })
+        Ok(Compiler::new(program))
     }
 
     pub fn compile(&mut self) -> Result<(), CompilerError> {
@@ -61,20 +67,11 @@ impl Visitor for Compiler {
         }
     }
 
-    fn visit_unary_expr(
-        &mut self,
-        op: lox_source::ast::expr::UnaryOperator,
-        expr: Expr,
-    ) -> Self::Value {
+    fn visit_unary_expr(&mut self, op: UnaryOperator, expr: Expr) -> Self::Value {
         todo!()
     }
 
-    fn visit_binary_expr(
-        &mut self,
-        left: Expr,
-        op: lox_source::ast::expr::BinaryOperator,
-        right: Expr,
-    ) -> Self::Value {
+    fn visit_binary_expr(&mut self, left: Expr, op: BinaryOperator, right: Expr) -> Self::Value {
         todo!()
     }
 
@@ -92,20 +89,11 @@ impl Visitor for Compiler {
         todo!()
     }
 
-    fn visit_assignment_expr(
-        &mut self,
-        id: lox_source::ast::expr::Identifier,
-        expr: Expr,
-    ) -> Self::Value {
+    fn visit_assignment_expr(&mut self, id: Identifier, expr: Expr) -> Self::Value {
         todo!()
     }
 
-    fn visit_logical_expr(
-        &mut self,
-        left: Expr,
-        op: lox_source::ast::expr::LogicalOperator,
-        right: Expr,
-    ) -> Self::Value {
+    fn visit_logical_expr(&mut self, left: Expr, op: LogicalOperator, right: Expr) -> Self::Value {
         todo!()
     }
 
@@ -113,49 +101,44 @@ impl Visitor for Compiler {
         todo!()
     }
 
-    fn visit_program(&mut self, program: lox_source::ast::program::Program) -> Self::Value {
+    fn visit_program(&mut self, program: Program) -> Self::Value {
         todo!()
     }
 
-    fn visit_declaration(&mut self, decl: lox_source::ast::decl::Decl) -> Self::Value {
+    fn visit_declaration(&mut self, decl: Decl) -> Self::Value {
         todo!()
     }
 
     fn visit_class_delcaration(
         &mut self,
-        id: lox_source::ast::expr::Identifier,
-        superclass: Option<lox_source::ast::expr::Identifier>,
-        funcs: Vec<lox_source::ast::decl::Decl>,
+        id: Identifier,
+        superclass: Option<Identifier>,
+        funcs: Vec<Decl>,
     ) -> Self::Value {
         todo!()
     }
 
-    fn visit_stmt(&mut self, stmt: lox_source::ast::stmt::Stmt) -> Self::Value {
+    fn visit_stmt(&mut self, stmt: Stmt) -> Self::Value {
         todo!()
     }
 
-    fn visit_block(&mut self, block: Vec<lox_source::ast::decl::Decl>) -> Self::Value {
+    fn visit_block(&mut self, block: Vec<Decl>) -> Self::Value {
         todo!()
     }
 
-    fn visit_if_stmt(
-        &mut self,
-        cond: Expr,
-        stmt: lox_source::ast::stmt::Stmt,
-        else_stmt: Option<lox_source::ast::stmt::Stmt>,
-    ) -> Self::Value {
+    fn visit_if_stmt(&mut self, cond: Expr, stmt: Stmt, else_stmt: Option<Stmt>) -> Self::Value {
         todo!()
     }
 
-    fn visit_while_stmt(&mut self, cond: Expr, body: lox_source::ast::stmt::Stmt) -> Self::Value {
+    fn visit_while_stmt(&mut self, cond: Expr, body: Stmt) -> Self::Value {
         todo!()
     }
 
     fn visit_func_declaration(
         &mut self,
-        name: lox_source::ast::expr::Identifier,
-        parameters: Vec<lox_source::ast::expr::Identifier>,
-        body: lox_source::ast::stmt::Stmt,
+        name: Identifier,
+        parameters: Vec<Identifier>,
+        body: Stmt,
     ) -> Self::Value {
         todo!()
     }
@@ -163,4 +146,9 @@ impl Visitor for Compiler {
     fn visit_return_stmt(&mut self, expr: Option<Expr>) -> Self::Value {
         todo!()
     }
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
 }
