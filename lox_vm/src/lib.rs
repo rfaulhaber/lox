@@ -2,7 +2,6 @@ use lox_bytecode;
 use lox_value::{Value, ValueArithmeticError};
 
 use lox_bytecode::{Chunk, Op};
-use lox_source::source::Span;
 use thiserror::Error;
 
 pub type InterpretResult = Result<(), InterpreterError>;
@@ -73,11 +72,15 @@ impl Interpreter {
     }
 
     fn step(&mut self) -> InterpretResult {
-        let (op, _) = self.next_op_and_advance();
+        let op = self.next_op_and_advance();
 
         match op {
-            Op::Constant(index) => {
-                let constant = self.chunk.number_at(index).unwrap();
+            Op::Float(index) => {
+                let constant = self.chunk.float_at(index).unwrap();
+                self.stack.push(Value::from(constant));
+            }
+            Op::Integer(index) => {
+                let constant = self.chunk.int_at(index).unwrap();
                 self.stack.push(Value::from(constant));
             }
             Op::Return => return Ok(()),
@@ -114,11 +117,11 @@ impl Interpreter {
         Ok(())
     }
 
-    fn next_op(&self) -> (Op, Span) {
+    fn next_op(&self) -> Op {
         self.chunk.code_at(self.ip).unwrap().clone()
     }
 
-    fn next_op_and_advance(&mut self) -> (Op, Span) {
+    fn next_op_and_advance(&mut self) -> Op {
         let op = self.next_op();
 
         self.ip = self.ip + 1;

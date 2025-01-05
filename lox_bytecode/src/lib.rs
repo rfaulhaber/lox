@@ -2,7 +2,8 @@ use lox_source::source::Span;
 
 #[derive(Debug, Clone)]
 pub enum Op {
-    Constant(usize),
+    Integer(usize),
+    Float(usize),
     Return,
     Negate,
     Add,
@@ -82,8 +83,13 @@ impl Chunk {
                     .find(|(location, _)| *location == idx)
                     .unwrap();
                 let formatted_op = match op {
-                    Op::Constant(index) => format!(
-                        "OP_CONSTANT (index={}) {}",
+                    Op::Integer(index) => format!(
+                        "OP_INTEGER (index={}) {}",
+                        index,
+                        self.int_at(*index).unwrap(),
+                    ),
+                    Op::Float(index) => format!(
+                        "OP_FLOAT (index={}) {}",
                         index,
                         self.float_at(*index).unwrap(),
                     ),
