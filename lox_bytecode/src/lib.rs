@@ -54,7 +54,7 @@ impl Chunk {
     }
 
     pub fn add_int(&mut self, number: i64) -> usize {
-        let idx = self.floats.len();
+        let idx = self.ints.len();
         self.ints.push(number);
 
         idx

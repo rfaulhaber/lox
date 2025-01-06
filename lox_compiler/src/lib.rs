@@ -47,6 +47,16 @@ impl<'c> Compiler {
     pub fn bytecode(self) -> Chunk {
         self.chunk
     }
+
+    fn write_int(&mut self, int: i64) {
+        let idx = self.chunk.add_int(int);
+        self.chunk.add_op(Op::Integer(idx));
+    }
+
+    fn write_float(&mut self, float: f64) {
+        let idx = self.chunk.add_float(float);
+        self.chunk.add_op(Op::Integer(idx));
+    }
 }
 
 impl Visitor for Compiler {
@@ -70,7 +80,12 @@ impl Visitor for Compiler {
     fn visit_unary_expr(&mut self, op: UnaryOperator, expr: Expr) -> Self::Value {
         let _ = self.visit_expr(expr)?;
 
-        self.chunk.add_op(Op::Negate);
+        let opcode = match op {
+            UnaryOperator::Neg => Op::Negate,
+            UnaryOperator::Not => todo!(),
+        };
+
+        self.chunk.add_op(opcode);
 
         Ok(())
     }
@@ -100,12 +115,10 @@ impl Visitor for Compiler {
     fn visit_literal(&mut self, literal: Literal) -> Self::Value {
         match literal {
             Literal::Number(Number::Float(f)) => {
-                let idx = self.chunk.add_float(f);
-                self.chunk.add_op(Op::Float(idx));
+                self.write_float(f);
             }
             Literal::Number(Number::Int(i)) => {
-                let idx = self.chunk.add_int(i);
-                self.chunk.add_op(Op::Integer(idx));
+                self.write_int(i);
             }
             Literal::String(_) => todo!(),
             Literal::Bool(_) => todo!(),
@@ -116,7 +129,7 @@ impl Visitor for Compiler {
     }
 
     fn visit_grouping_expr(&mut self, expr: Expr) -> Self::Value {
-        todo!()
+        self.visit_expr(expr)
     }
 
     fn visit_assignment_expr(&mut self, id: Identifier, expr: Expr) -> Self::Value {
@@ -222,38 +235,107 @@ mod test {
 
     #[test]
     fn grouping() {
-        let input = "(123)";
-        todo!();
+        let input = "(123);";
+        let mut expected = Chunk::new();
+        expected.add_int(123);
+        expected.add_op(Op::Integer(0));
+
+        let mut compiler = Compiler::new_from_source(input).unwrap();
+        let _ = compiler.compile().unwrap();
+        let result = compiler.bytecode();
+
+        assert_eq!(result.disassemble(), expected.disassemble());
     }
 
     #[test]
     fn unary_negation() {
-        let input = "-123";
-        todo!();
+        let input = "-123;";
+        let mut expected = Chunk::new();
+        expected.add_int(123);
+        expected.add_op(Op::Integer(0));
+        expected.add_op(Op::Negate);
+
+        let mut compiler = Compiler::new_from_source(input).unwrap();
+        let _ = compiler.compile().unwrap();
+        let result = compiler.bytecode();
+
+        assert_eq!(result.disassemble(), expected.disassemble());
     }
 
     #[test]
     fn basic_add() {
-        let input = "123 + 456";
+        let input = "123 + 456;";
+
+        let mut expected = Chunk::new();
+        expected.add_int(123);
+        expected.add_op(Op::Integer(0));
+        expected.add_int(456);
+        expected.add_op(Op::Integer(1));
+        expected.add_op(Op::Add);
+
+        let mut compiler = Compiler::new_from_source(input).unwrap();
+        let _ = compiler.compile().unwrap();
+        let result = compiler.bytecode();
+
+        assert_eq!(result.disassemble(), expected.disassemble());
     }
 
     #[test]
     fn basic_sub() {
-        let input = "123 - 456";
+        let input = "123 - 456;";
+
+        let mut expected = Chunk::new();
+        expected.add_int(123);
+        expected.add_op(Op::Integer(0));
+        expected.add_int(456);
+        expected.add_op(Op::Integer(1));
+        expected.add_op(Op::Subtract);
+
+        let mut compiler = Compiler::new_from_source(input).unwrap();
+        let _ = compiler.compile().unwrap();
+        let result = compiler.bytecode();
+
+        assert_eq!(result.disassemble(), expected.disassemble());
     }
 
     #[test]
     fn basic_mul() {
-        let input = "123 * 456";
+        let input = "123 * 456;";
+
+        let mut expected = Chunk::new();
+        expected.add_int(123);
+        expected.add_op(Op::Integer(0));
+        expected.add_int(456);
+        expected.add_op(Op::Integer(1));
+        expected.add_op(Op::Multiply);
+
+        let mut compiler = Compiler::new_from_source(input).unwrap();
+        let _ = compiler.compile().unwrap();
+        let result = compiler.bytecode();
+
+        assert_eq!(result.disassemble(), expected.disassemble());
     }
 
     #[test]
     fn basic_div() {
-        let input = "123 / 456";
+        let input = "123 / 456;";
+
+        let mut expected = Chunk::new();
+        expected.add_int(123);
+        expected.add_op(Op::Integer(0));
+        expected.add_int(456);
+        expected.add_op(Op::Integer(1));
+        expected.add_op(Op::Divide);
+
+        let mut compiler = Compiler::new_from_source(input).unwrap();
+        let _ = compiler.compile().unwrap();
+        let result = compiler.bytecode();
+
+        assert_eq!(result.disassemble(), expected.disassemble());
     }
 
     #[test]
     fn complex_expressions() {
-        let input = "-(123) + 456 * -789";
+        let input = "-(123) + 456 * -789;";
     }
 }
