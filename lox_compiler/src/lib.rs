@@ -82,7 +82,7 @@ impl Visitor for Compiler {
 
         let opcode = match op {
             UnaryOperator::Neg => Op::Negate,
-            UnaryOperator::Not => todo!(),
+            UnaryOperator::Not => Op::Not,
         };
 
         self.chunk.add_op(opcode);
@@ -121,8 +121,9 @@ impl Visitor for Compiler {
                 self.write_int(i);
             }
             Literal::String(_) => todo!(),
-            Literal::Bool(_) => todo!(),
-            Literal::Nil => todo!(),
+            Literal::Bool(true) => self.chunk.add_op(Op::True),
+            Literal::Bool(false) => self.chunk.add_op(Op::False),
+            Literal::Nil => self.chunk.add_op(Op::Nil),
         };
 
         Ok(())
@@ -337,5 +338,20 @@ mod test {
     #[test]
     fn complex_expressions() {
         let input = "-(123) + 456 * -789;";
+    }
+
+    #[test]
+    fn booleans() {
+        let input = "!true;";
+
+        let mut expected = Chunk::new();
+        expected.add_op(Op::True);
+        expected.add_op(Op::Not);
+
+        let mut compiler = Compiler::new_from_source(input).unwrap();
+        let _ = compiler.compile().unwrap();
+        let result = compiler.bytecode();
+
+        assert_eq!(result.disassemble(), expected.disassemble());
     }
 }

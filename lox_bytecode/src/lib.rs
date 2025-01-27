@@ -10,6 +10,10 @@ pub enum Op {
     Subtract,
     Multiply,
     Divide,
+    True,
+    False,
+    Nil,
+    Not,
 }
 
 #[derive(Debug, Clone)]
@@ -95,6 +99,10 @@ impl Chunk {
                     Op::Subtract => "OP_SUBTRACT".into(),
                     Op::Multiply => "OP_MULTIPLY".into(),
                     Op::Divide => "OP_DIVIDE".into(),
+                    Op::True => "OP_TRUE".into(),
+                    Op::False => "OP_FALSE".into(),
+                    Op::Nil => "OP_NIL".into(),
+                    Op::Not => "OP_NOT".into(),
                 };
 
                 if let Some((_, source)) = source {

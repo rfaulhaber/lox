@@ -14,6 +14,8 @@ pub enum InterpreterError {
     InsufficientStackLengthForOperation(String, usize),
     #[error("Arithmetic error")]
     ArithmeticError(#[from] ValueArithmeticError),
+    #[error("Cannot negate something that isn't a number ({0})")]
+    NegateError(Value),
 }
 
 #[derive(Debug)]
@@ -86,6 +88,7 @@ impl Interpreter {
             Op::Return => return Ok(()),
             Op::Negate => match self.stack.pop() {
                 Some(Value::Number(n)) => self.stack.push(Value::Number(-n)),
+                Some(v) => return Err(InterpreterError::NegateError(v)),
                 None => unreachable!("negate operation found without operand"),
             },
             Op::Add => {
@@ -104,6 +107,13 @@ impl Interpreter {
                 let res = self.binary_op(BinaryOp::Div)?;
                 self.stack.push(res)
             }
+            Op::True => todo!(),
+            Op::False => todo!(),
+            Op::Nil => todo!(),
+            Op::Not => match self.stack.pop() {
+                Some(value) => self.stack.push(Value::Bool(value.is_falsy())),
+                None => unreachable!("not operation found without operand"),
+            },
         }
 
         Ok(())

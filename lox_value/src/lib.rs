@@ -14,6 +14,8 @@ pub enum ValueArithmeticError {
 #[derive(Debug, Clone, PartialEq)]
 pub enum Value {
     Number(Number),
+    Bool(bool),
+    Nil,
 }
 
 impl From<f64> for Value {
@@ -28,6 +30,12 @@ impl From<i64> for Value {
     }
 }
 
+impl From<bool> for Value {
+    fn from(value: bool) -> Self {
+        Value::Bool(value)
+    }
+}
+
 impl std::fmt::Display for Value {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(
@@ -35,6 +43,8 @@ impl std::fmt::Display for Value {
             "{}",
             match self {
                 Value::Number(n) => n.to_string(),
+                Value::Bool(b) => b.to_string(),
+                Value::Nil => String::from("nil"),
             }
         )
     }
@@ -110,6 +120,15 @@ impl std::ops::Neg for Value {
                 "negation".into(),
                 val.to_string(),
             )),
+        }
+    }
+}
+
+impl Value {
+    pub fn is_falsy(&self) -> bool {
+        match self {
+            Value::Bool(false) | Value::Nil => true,
+            _ => false,
         }
     }
 }
