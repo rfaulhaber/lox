@@ -14,6 +14,9 @@ pub enum Op {
     False,
     Nil,
     Not,
+    Equal,
+    Greater,
+    Less,
 }
 
 #[derive(Debug, Clone)]
@@ -103,6 +106,9 @@ impl Chunk {
                     Op::False => "OP_FALSE".into(),
                     Op::Nil => "OP_NIL".into(),
                     Op::Not => "OP_NOT".into(),
+                    Op::Equal => "OP_EQUAL".into(),
+                    Op::Greater => "OP_GREATER".into(),
+                    Op::Less => "OP_LESS".into(),
                 };
 
                 if let Some((_, source)) = source {

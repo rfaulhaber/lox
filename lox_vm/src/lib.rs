@@ -11,7 +11,7 @@ pub enum InterpreterError {
     #[error("Invalid operand provided for {0}: expected {1}")]
     InvalidOperand(String, String),
     #[error("Insufficient stack length for operation {0}: {1}")]
-    InsufficientStackLengthForOperation(String, usize),
+    InsufficientStackLengthForOperation(BinaryOp, usize),
     #[error("Arithmetic error")]
     ArithmeticError(#[from] ValueArithmeticError),
     #[error("Cannot negate something that isn't a number ({0})")]
@@ -24,12 +24,39 @@ pub enum InterpreterMode {
     Debug,
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 enum BinaryOp {
     Add,
     Sub,
     Mul,
     Div,
+    Eq,
+    Gt,
+    Lt,
+}
+
+impl std::fmt::Display for BinaryOp {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "{}",
+            match self {
+                BinaryOp::Add => "+",
+                BinaryOp::Sub => "-",
+                BinaryOp::Mul => "*",
+                BinaryOp::Div => "/",
+                BinaryOp::Eq => "==",
+                BinaryOp::Gt => ">",
+                BinaryOp::Lt => "<",
+            }
+        )
+    }
+}
+
+#[derive(Debug)]
+enum UnaryOp {
+    Neg,
+    Not,
 }
 
 #[derive(Debug)]
@@ -107,13 +134,16 @@ impl Interpreter {
                 let res = self.binary_op(BinaryOp::Div)?;
                 self.stack.push(res)
             }
-            Op::True => todo!(),
-            Op::False => todo!(),
-            Op::Nil => todo!(),
+            Op::True => self.stack.push(Value::Bool(true)),
+            Op::False => self.stack.push(Value::Bool(false)),
+            Op::Nil => self.stack.push(Value::Nil),
             Op::Not => match self.stack.pop() {
                 Some(value) => self.stack.push(Value::Bool(value.is_falsy())),
                 None => unreachable!("not operation found without operand"),
             },
+            Op::Equal => todo!(),
+            Op::Greater => todo!(),
+            Op::Less => todo!(),
         }
 
         Ok(())
@@ -141,15 +171,8 @@ impl Interpreter {
 
     fn binary_op(&mut self, op: BinaryOp) -> Result<Value, InterpreterError> {
         if self.stack.len() < 2 {
-            let op_name = match op {
-                BinaryOp::Add => "addition",
-                BinaryOp::Sub => "subtraction",
-                BinaryOp::Mul => "multiplication",
-                BinaryOp::Div => "division",
-            };
-
             return Err(InterpreterError::InsufficientStackLengthForOperation(
-                op_name.into(),
+                op,
                 self.stack.len(),
             ));
         }
@@ -162,6 +185,32 @@ impl Interpreter {
             BinaryOp::Sub => (a - b)?,
             BinaryOp::Mul => (a * b)?,
             BinaryOp::Div => (a / b)?,
+            BinaryOp::Eq => Value::Bool(a == b),
+            // TODO refactor, put these elsewhere
+            BinaryOp::Gt => match (a, b) {
+                (Value::Number(left), Value::Number(right)) => Value::Bool(left > right),
+                (left, right) => {
+                    return Err(InterpreterError::ArithmeticError(
+                        ValueArithmeticError::IncompatibleTypes(
+                            ">".into(),
+                            left.to_string(),
+                            right.to_string(),
+                        ),
+                    ));
+                }
+            },
+            BinaryOp::Lt => match (a, b) {
+                (Value::Number(left), Value::Number(right)) => Value::Bool(left < right),
+                (left, right) => {
+                    return Err(InterpreterError::ArithmeticError(
+                        ValueArithmeticError::IncompatibleTypes(
+                            ">".into(),
+                            left.to_string(),
+                            right.to_string(),
+                        ),
+                    ));
+                }
+            },
         };
 
         Ok(value)

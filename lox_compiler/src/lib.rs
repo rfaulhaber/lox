@@ -94,20 +94,22 @@ impl Visitor for Compiler {
         let _ = self.visit_expr(left)?;
         let _ = self.visit_expr(right)?;
 
-        let opcode = match op {
-            BinaryOperator::Eq => todo!(),
-            BinaryOperator::Neq => todo!(),
-            BinaryOperator::Lt => todo!(),
-            BinaryOperator::Lte => todo!(),
-            BinaryOperator::Gt => todo!(),
-            BinaryOperator::Gte => todo!(),
-            BinaryOperator::Add => Op::Add,
-            BinaryOperator::Sub => Op::Subtract,
-            BinaryOperator::Mul => Op::Multiply,
-            BinaryOperator::Div => Op::Divide,
+        let opcode: &[Op] = match op {
+            BinaryOperator::Eq => &[Op::Equal],
+            BinaryOperator::Neq => &[Op::Equal, Op::Not],
+            BinaryOperator::Lt => &[Op::Less],
+            BinaryOperator::Lte => &[Op::Less, Op::Not],
+            BinaryOperator::Gt => &[Op::Greater],
+            BinaryOperator::Gte => &[Op::Greater, Op::Not],
+            BinaryOperator::Add => &[Op::Add],
+            BinaryOperator::Sub => &[Op::Subtract],
+            BinaryOperator::Mul => &[Op::Multiply],
+            BinaryOperator::Div => &[Op::Divide],
         };
 
-        self.chunk.add_op(opcode);
+        for op in opcode {
+            self.chunk.add_op(op.clone());
+        }
 
         Ok(())
     }

@@ -50,6 +50,7 @@ impl std::fmt::Display for Value {
     }
 }
 
+// TODO the vm should just handle these, right?
 impl std::ops::Add for Value {
     type Output = Result<Value, ValueArithmeticError>;
 
