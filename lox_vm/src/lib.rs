@@ -144,6 +144,7 @@ impl Interpreter {
             Op::Equal => todo!(),
             Op::Greater => todo!(),
             Op::Less => todo!(),
+            Op::String(_) => todo!(),
         }
 
         Ok(())

@@ -1,7 +1,9 @@
 pub use number::Number;
+pub use object::Object;
 use thiserror::Error;
 
 mod number;
+mod object;
 
 #[derive(Debug, Clone, Error, PartialEq)]
 pub enum ValueArithmeticError {
@@ -16,6 +18,7 @@ pub enum Value {
     Number(Number),
     Bool(bool),
     Nil,
+    Object(Object),
 }
 
 impl From<f64> for Value {
@@ -45,6 +48,7 @@ impl std::fmt::Display for Value {
                 Value::Number(n) => n.to_string(),
                 Value::Bool(b) => b.to_string(),
                 Value::Nil => String::from("nil"),
+                Value::Object(Object::String(s)) => format!("\"{}\"", s),
             }
         )
     }

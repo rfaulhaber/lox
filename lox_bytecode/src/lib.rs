@@ -4,6 +4,7 @@ use lox_source::source::Span;
 pub enum Op {
     Integer(usize),
     Float(usize),
+    String(usize),
     Return,
     Negate,
     Add,
@@ -24,6 +25,7 @@ pub struct Chunk {
     code: Vec<Op>,
     floats: Vec<f64>,
     ints: Vec<i64>,
+    strings: Vec<String>,
     locations: Vec<(usize, Span)>,
 }
 
@@ -39,6 +41,7 @@ impl Chunk {
             code: Vec::new(),
             floats: Vec::new(),
             ints: Vec::new(),
+            strings: Vec::new(),
             locations: Vec::new(),
         }
     }
@@ -67,6 +70,13 @@ impl Chunk {
         idx
     }
 
+    pub fn add_string(&mut self, string: String) -> usize {
+        let idx = self.strings.len();
+        self.strings.push(string);
+
+        idx
+    }
+
     pub fn code_at(&self, index: usize) -> Option<&Op> {
         self.code.get(index)
     }
@@ -77,6 +87,10 @@ impl Chunk {
 
     pub fn int_at(&self, index: usize) -> Option<i64> {
         self.ints.get(index).copied()
+    }
+
+    pub fn string_at(&self, index: usize) -> Option<String> {
+        self.strings.get(index).cloned()
     }
 
     pub fn disassemble(&self) -> Vec<String> {
@@ -95,6 +109,11 @@ impl Chunk {
                         "OP_FLOAT (index={}) {}",
                         index,
                         self.float_at(*index).unwrap(),
+                    ),
+                    Op::String(index) => format!(
+                        "OP_STRING (index={}) {}",
+                        index,
+                        self.string_at(*index).unwrap(),
                     ),
                     Op::Return => "OP_RETURN".into(),
                     Op::Negate => "OP_NEAGATE".into(),

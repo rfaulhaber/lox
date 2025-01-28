@@ -55,7 +55,12 @@ impl<'c> Compiler {
 
     fn write_float(&mut self, float: f64) {
         let idx = self.chunk.add_float(float);
-        self.chunk.add_op(Op::Integer(idx));
+        self.chunk.add_op(Op::Float(idx));
+    }
+
+    fn write_string(&mut self, string: String) {
+        let idx = self.chunk.add_string(string);
+        self.chunk.add_op(Op::String(idx))
     }
 }
 
@@ -122,7 +127,7 @@ impl Visitor for Compiler {
             Literal::Number(Number::Int(i)) => {
                 self.write_int(i);
             }
-            Literal::String(_) => todo!(),
+            Literal::String(s) => self.write_string(s),
             Literal::Bool(true) => self.chunk.add_op(Op::True),
             Literal::Bool(false) => self.chunk.add_op(Op::False),
             Literal::Nil => self.chunk.add_op(Op::Nil),
