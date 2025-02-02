@@ -4,6 +4,15 @@ use lox_value::{Value, ValueArithmeticError};
 use lox_bytecode::{Chunk, Op};
 use thiserror::Error;
 
+// macro_rules! binary_op {
+//     ($left:ident, $right:ident, $err:expr) => {
+//         match (left, right) {
+
+//         }
+
+//     };
+// }
+
 pub type InterpretResult = Result<(), InterpreterError>;
 
 #[derive(Debug, PartialEq, Error)]
@@ -141,9 +150,18 @@ impl Interpreter {
                 Some(value) => self.stack.push(Value::Bool(value.is_falsy())),
                 None => unreachable!("not operation found without operand"),
             },
-            Op::Equal => todo!(),
-            Op::Greater => todo!(),
-            Op::Less => todo!(),
+            Op::Equal => {
+                let binary_op = self.binary_op(BinaryOp::Eq)?;
+                self.stack.push(binary_op)
+            }
+            Op::Greater => {
+                let binary_op = self.binary_op(BinaryOp::Gt)?;
+                self.stack.push(binary_op)
+            }
+            Op::Less => {
+                let binary_op = self.binary_op(BinaryOp::Lt)?;
+                self.stack.push(binary_op)
+            }
             Op::String(_) => todo!(),
         }
 
