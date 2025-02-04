@@ -77,6 +77,21 @@ impl Chunk {
         idx
     }
 
+    pub fn push_float(&mut self, number: f64) {
+        let idx = self.add_float(number);
+        self.add_op(Op::Float(idx));
+    }
+
+    pub fn push_int(&mut self, number: i64) {
+        let idx = self.add_int(number);
+        self.add_op(Op::Integer(idx));
+    }
+
+    pub fn push_string(&mut self, string: String) {
+        let idx = self.add_string(string);
+        self.add_op(Op::String(idx));
+    }
+
     pub fn code_at(&self, index: usize) -> Option<&Op> {
         self.code.get(index)
     }
