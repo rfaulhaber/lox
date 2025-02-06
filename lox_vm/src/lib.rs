@@ -1,3 +1,5 @@
+use std::io::Write;
+
 use lox_bytecode;
 use lox_value::{Value, ValueOperatorError};
 
@@ -6,7 +8,7 @@ use thiserror::Error;
 
 pub type InterpretResult = Result<(), InterpreterError>;
 
-#[derive(Debug, PartialEq, Error)]
+#[derive(Debug, Error)]
 pub enum InterpreterError {
     #[error("Invalid operand provided for {0}: expected {1}")]
     InvalidOperand(String, String),
@@ -16,6 +18,10 @@ pub enum InterpreterError {
     ArithmeticError(#[from] ValueOperatorError),
     #[error("Cannot negate something that isn't a number ({0})")]
     NegateError(Value),
+    #[error("Stack is empty")]
+    EmptyStack,
+    #[error("IO error")]
+    IOError(#[from] std::io::Error),
 }
 
 #[derive(Debug)]
@@ -161,6 +167,17 @@ impl Interpreter {
             Some(Op::Less) => {
                 let binary_op = self.binary_op(BinaryOp::Lt)?;
                 self.stack.push(binary_op)
+            }
+            Some(Op::Print) => {
+                let value = self.stack.pop();
+
+                match value {
+                    Some(v) => {
+                        let mut stdout = std::io::stdout().lock();
+                        writeln!(&mut stdout, "{}", v)?;
+                    }
+                    None => return Err(InterpreterError::EmptyStack),
+                }
             }
         }
 

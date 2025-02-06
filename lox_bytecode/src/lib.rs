@@ -18,6 +18,7 @@ pub enum Op {
     Equal,
     Greater,
     Less,
+    Print,
 }
 
 #[derive(Debug, Clone)]
@@ -143,6 +144,7 @@ impl Chunk {
                     Op::Equal => "OP_EQUAL".into(),
                     Op::Greater => "OP_GREATER".into(),
                     Op::Less => "OP_LESS".into(),
+                    Op::Print => "OP_PRINT".into(),
                 };
 
                 if let Some((_, source)) = source {

@@ -188,7 +188,12 @@ impl Visitor for Compiler {
         match stmt {
             Stmt::Block(_) => todo!(),
             Stmt::Expr(expr) => self.visit_expr(expr),
-            Stmt::Print(_) => todo!(),
+            Stmt::Print(expr) => {
+                let _ = self.visit_expr(expr)?;
+                self.chunk.add_op(Op::Print);
+
+                Ok(())
+            }
             Stmt::Return(_) => todo!(),
             Stmt::If(_, _, _) => todo!(),
             Stmt::While(_, _) => todo!(),
