@@ -1,4 +1,4 @@
-use std::io::Write;
+use std::{collections::HashMap, io::Write};
 
 use lox_bytecode;
 use lox_value::{Value, ValueOperatorError};
@@ -22,6 +22,8 @@ pub enum InterpreterError {
     EmptyStack,
     #[error("IO error")]
     IOError(#[from] std::io::Error),
+    #[error("Missing value at index {0}")]
+    NoValueAtIndex(usize),
 }
 
 #[derive(Debug)]
@@ -70,6 +72,7 @@ pub struct Interpreter {
     chunk: Chunk,
     ip: usize,
     stack: Vec<Value>,
+    globals: HashMap<String, Value>,
     mode: InterpreterMode,
 }
 
@@ -98,6 +101,7 @@ impl Interpreter {
             chunk: Chunk::new(),
             ip: 0,
             stack: Vec::new(),
+            globals: HashMap::new(),
             mode,
         }
     }
@@ -179,6 +183,24 @@ impl Interpreter {
                     None => return Err(InterpreterError::EmptyStack),
                 }
             }
+            Some(Op::Pop) => {
+                let _ = self.stack.pop();
+            }
+            Some(Op::DefineGlobal(index)) => {
+                let value = self.stack.pop();
+                let name = match self.chunk.string_at(index) {
+                    Some(value) => value,
+                    None => return Err(InterpreterError::NoValueAtIndex(index)),
+                };
+
+                match value {
+                    Some(v) => {
+                        self.globals.insert(name, v);
+                    }
+                    None => return Err(InterpreterError::EmptyStack),
+                }
+            }
+            Some(Op::GetGlobal(_)) => todo!(),
         }
 
         Ok(InterpreterState::Running)

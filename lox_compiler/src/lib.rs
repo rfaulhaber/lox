@@ -170,7 +170,18 @@ impl Visitor for Compiler {
             Decl::Func(name, parameters, body) => {
                 self.visit_func_declaration(name, parameters, body)
             }
-            Decl::Var(_, _) => todo!(),
+            Decl::Var(id, expr) => {
+                let _ = match expr {
+                    Some(expr) => self.visit_expr(expr)?,
+                    None => {
+                        self.chunk.add_op(Op::Nil);
+                    }
+                };
+
+                self.chunk.add_string(id.name);
+
+                Ok(())
+            }
             Decl::Stmt(stmt) => self.visit_stmt(stmt),
         }
     }
@@ -187,7 +198,12 @@ impl Visitor for Compiler {
     fn visit_stmt(&mut self, stmt: Stmt) -> Self::Value {
         match stmt {
             Stmt::Block(_) => todo!(),
-            Stmt::Expr(expr) => self.visit_expr(expr),
+            Stmt::Expr(expr) => {
+                let _ = self.visit_expr(expr)?;
+                self.chunk.add_op(Op::Pop);
+
+                Ok(())
+            }
             Stmt::Print(expr) => {
                 let _ = self.visit_expr(expr)?;
                 self.chunk.add_op(Op::Print);
