@@ -77,8 +77,12 @@ impl Visitor for Compiler {
             Expr::Grouping(expr) => self.visit_expr(*expr),
             Expr::Get(_, _) => todo!(),
             Expr::Set(_, _, _) => todo!(),
-            Expr::Var(id) => todo!(),
-            Expr::Assignment(id, expr) => todo!(),
+            Expr::Var(id) => {
+                let idx = self.chunk.add_string(id.name);
+                self.chunk.add_op(Op::GetGlobal(idx));
+                Ok(())
+            }
+            Expr::Assignment(id, expr) => self.visit_assignment_expr(id, *expr),
         }
     }
 
@@ -141,7 +145,12 @@ impl Visitor for Compiler {
     }
 
     fn visit_assignment_expr(&mut self, id: Identifier, expr: Expr) -> Self::Value {
-        todo!()
+        let _ = self.visit_expr(expr)?;
+
+        let idx = self.chunk.add_string(id.name);
+        self.chunk.add_op(Op::SetGlobal(idx));
+
+        Ok(())
     }
 
     fn visit_logical_expr(&mut self, left: Expr, op: LogicalOperator, right: Expr) -> Self::Value {
@@ -254,6 +263,7 @@ mod test {
         let mut expected = Chunk::new();
         expected.add_int(123);
         expected.add_op(Op::Integer(0));
+        expected.add_op(Op::Pop);
 
         let mut compiler = Compiler::new_from_source(input).unwrap();
         let _ = compiler.compile().unwrap();
@@ -268,6 +278,7 @@ mod test {
         let mut expected = Chunk::new();
         expected.add_int(123);
         expected.add_op(Op::Integer(0));
+        expected.add_op(Op::Pop);
 
         let mut compiler = Compiler::new_from_source(input).unwrap();
         let _ = compiler.compile().unwrap();
@@ -283,6 +294,7 @@ mod test {
         expected.add_int(123);
         expected.add_op(Op::Integer(0));
         expected.add_op(Op::Negate);
+        expected.add_op(Op::Pop);
 
         let mut compiler = Compiler::new_from_source(input).unwrap();
         let _ = compiler.compile().unwrap();
@@ -301,6 +313,7 @@ mod test {
         expected.add_int(456);
         expected.add_op(Op::Integer(1));
         expected.add_op(Op::Add);
+        expected.add_op(Op::Pop);
 
         let mut compiler = Compiler::new_from_source(input).unwrap();
         let _ = compiler.compile().unwrap();
@@ -319,6 +332,7 @@ mod test {
         expected.add_int(456);
         expected.add_op(Op::Integer(1));
         expected.add_op(Op::Subtract);
+        expected.add_op(Op::Pop);
 
         let mut compiler = Compiler::new_from_source(input).unwrap();
         let _ = compiler.compile().unwrap();
@@ -337,6 +351,7 @@ mod test {
         expected.add_int(456);
         expected.add_op(Op::Integer(1));
         expected.add_op(Op::Multiply);
+        expected.add_op(Op::Pop);
 
         let mut compiler = Compiler::new_from_source(input).unwrap();
         let _ = compiler.compile().unwrap();
@@ -355,17 +370,13 @@ mod test {
         expected.add_int(456);
         expected.add_op(Op::Integer(1));
         expected.add_op(Op::Divide);
+        expected.add_op(Op::Pop);
 
         let mut compiler = Compiler::new_from_source(input).unwrap();
         let _ = compiler.compile().unwrap();
         let result = compiler.bytecode();
 
         assert_eq!(result.disassemble(), expected.disassemble());
-    }
-
-    #[test]
-    fn complex_expressions() {
-        let input = "-(123) + 456 * -789;";
     }
 
     #[test]
@@ -375,11 +386,25 @@ mod test {
         let mut expected = Chunk::new();
         expected.add_op(Op::True);
         expected.add_op(Op::Not);
+        expected.add_op(Op::Pop);
 
         let mut compiler = Compiler::new_from_source(input).unwrap();
         let _ = compiler.compile().unwrap();
         let result = compiler.bytecode();
 
         assert_eq!(result.disassemble(), expected.disassemble());
+    }
+
+    #[test]
+    fn snapshots() {
+        let input = r#"var beverage = "cafe au lait";
+var breakfast = "beignets with " + beverage;
+print breakfast;"#;
+
+        let mut compiler = Compiler::new_from_source(input).unwrap();
+        let _ = compiler.compile().unwrap();
+        let result = compiler.bytecode().disassemble();
+
+        insta::assert_yaml_snapshot!(result);
     }
 }

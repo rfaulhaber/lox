@@ -24,6 +24,8 @@ pub enum InterpreterError {
     IOError(#[from] std::io::Error),
     #[error("Missing value at index {0}")]
     NoValueAtIndex(usize),
+    #[error("Undefined variable {0}")]
+    UndefinedVariable(String),
 }
 
 #[derive(Debug)]
@@ -200,7 +202,36 @@ impl Interpreter {
                     None => return Err(InterpreterError::EmptyStack),
                 }
             }
-            Some(Op::GetGlobal(_)) => todo!(),
+            Some(Op::GetGlobal(index)) => {
+                let name = match self.chunk.string_at(index) {
+                    Some(value) => value,
+                    None => return Err(InterpreterError::NoValueAtIndex(index)),
+                };
+
+                let value = match self.globals.get(&name) {
+                    Some(value) => value,
+                    None => return Err(InterpreterError::UndefinedVariable(name)),
+                };
+
+                self.stack.push(value.clone());
+            }
+            Some(Op::SetGlobal(index)) => {
+                let name = match self.chunk.string_at(index) {
+                    Some(value) => value,
+                    None => return Err(InterpreterError::NoValueAtIndex(index)),
+                };
+
+                if !self.globals.contains_key(&name) {
+                    return Err(InterpreterError::UndefinedVariable(name));
+                }
+
+                let value = match self.stack.pop() {
+                    Some(value) => value,
+                    None => return Err(InterpreterError::EmptyStack),
+                };
+
+                let _ = self.globals.insert(name, value);
+            }
         }
 
         Ok(InterpreterState::Running)

@@ -7,3 +7,6 @@ edition = "2021"
 lox_source = { path = "../lox_source" }
 lox_bytecode = { path = "../lox_bytecode" }
 thiserror = "1"
+
+[dev-dependencies]
+insta = { version = "1.42.1", features = ["yaml"] }

@@ -22,6 +22,7 @@ pub enum Op {
     Pop,
     DefineGlobal(usize),
     GetGlobal(usize),
+    SetGlobal(usize),
 }
 
 #[derive(Debug, Clone)]
@@ -141,6 +142,11 @@ impl Chunk {
                     ),
                     Op::GetGlobal(index) => format!(
                         "OP_GET_GLOBAL (index={}) {}",
+                        index,
+                        self.string_at(*index).unwrap(),
+                    ),
+                    Op::SetGlobal(index) => format!(
+                        "OP_SET_GLOBAL (index={}) {}",
                         index,
                         self.string_at(*index).unwrap(),
                     ),

@@ -1,0 +1,10 @@
+---
+source: lox_compiler/src/lib.rs
+expression: result
+---
+- "0000    OP_STRING (index=0) \"cafe au lait\""
+- "0001    OP_STRING (index=2) \"beignets with \""
+- 0002    OP_GET_GLOBAL (index=3) beverage
+- "0003    OP_ADD              "
+- 0004    OP_GET_GLOBAL (index=5) breakfast
+- "0005    OP_PRINT            "
