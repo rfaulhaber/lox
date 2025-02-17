@@ -2,9 +2,14 @@
 source: lox_compiler/src/lib.rs
 expression: result
 ---
-- "0000    OP_STRING (index=0) \"cafe au lait\""
-- "0001    OP_STRING (index=2) \"beignets with \""
-- 0002    OP_GET_GLOBAL (index=3) beverage
-- "0003    OP_ADD              "
-- 0004    OP_GET_GLOBAL (index=5) breakfast
-- "0005    OP_PRINT            "
+- "0000    OP_STRING (index=0) \"beignets\""
+- 0001    OP_DEFINE_GLOBAL (index=1) breakfast
+- "0002    OP_STRING (index=2) \"cafe au lait\""
+- 0003    OP_DEFINE_GLOBAL (index=3) beverage
+- "0004    OP_STRING (index=4) \"beignets with \""
+- 0005    OP_GET_GLOBAL (index=5) beverage
+- "0006    OP_ADD              "
+- 0007    OP_SET_GLOBAL (index=6) breakfast
+- "0008    OP_POP              "
+- 0009    OP_GET_GLOBAL (index=7) breakfast
+- "0010    OP_PRINT            "

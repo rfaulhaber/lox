@@ -187,7 +187,8 @@ impl Visitor for Compiler {
                     }
                 };
 
-                self.chunk.add_string(id.name);
+                let idx = self.chunk.add_string(id.name);
+                self.chunk.add_op(Op::DefineGlobal(idx));
 
                 Ok(())
             }
@@ -397,8 +398,10 @@ mod test {
 
     #[test]
     fn snapshots() {
-        let input = r#"var beverage = "cafe au lait";
-var breakfast = "beignets with " + beverage;
+        let input = r#"var breakfast = "beignets";
+var beverage = "cafe au lait";
+breakfast = "beignets with " + beverage;
+
 print breakfast;"#;
 
         let mut compiler = Compiler::new_from_source(input).unwrap();

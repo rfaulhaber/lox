@@ -13,6 +13,7 @@ rustyline = "14"
 clap = { version = "4.5", features = ["derive"] }
 anyhow = "1"
 lox_vm = { path = "./lox_vm" }
+lox_compiler = { path = "./lox_compiler" }
 lox_source = { path = "./lox_source" }
 
 [workspace]

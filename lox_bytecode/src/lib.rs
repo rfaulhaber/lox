@@ -77,7 +77,7 @@ impl Chunk {
 
     pub fn add_string(&mut self, string: String) -> usize {
         let idx = self.strings.len();
-        self.strings.push(string);
+        self.strings.push(string.trim_matches('"').to_string());
 
         idx
     }

@@ -3,35 +3,76 @@ use rustyline::{error::ReadlineError, DefaultEditor, Result as RlResult};
 use std::io::Read;
 use std::path::PathBuf;
 
-use clap::{Parser, ValueEnum};
+use clap::{Parser, Subcommand, ValueEnum};
 
 #[derive(Debug, Clone, Parser)]
-#[command(version, about)]
-pub struct Args {
-    #[arg(long)]
-    pub r#use: Option<UseOption>,
+#[command(name = "rclox")]
+#[command(about = "clox implementation in Rust")]
+pub struct Cli {
+    #[command(subcommand)]
+    pub command: Commands,
+}
 
-    pub file: Option<PathBuf>,
+#[derive(Debug, Clone, Subcommand)]
+pub enum Commands {
+    #[command(arg_required_else_help = true)]
+    #[command(name = "dsm")]
+    #[command(about = "dissassemble a file")]
+    Disassemble {
+        #[arg(required = true)]
+        file: PathBuf,
+    },
+    #[command(about = "run repl")]
+    Repl {
+        #[arg(default_value_t = VmOptions::Bytecode)]
+        vm: VmOptions,
+    },
+    #[command(arg_required_else_help = true)]
+    Eval {
+        #[arg(required = true)]
+        file: PathBuf,
+        #[arg(default_value_t = VmOptions::Bytecode)]
+        vm: VmOptions,
+    },
 }
 
 #[derive(Debug, Clone, ValueEnum)]
-pub enum UseOption {
-    VM,
-    JIT,
+pub enum VmOptions {
+    Bytecode,
+    TreeWalk,
+}
+
+impl std::fmt::Display for VmOptions {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        self.to_possible_value()
+            .expect("no values are skipped")
+            .get_name()
+            .fmt(f)
+    }
 }
 
 pub fn repl() -> RlResult<()> {
     let mut rl = DefaultEditor::new()?;
 
-    let vm = lox_vm::Interpreter::new();
+    let mut vm = lox_vm::Interpreter::new();
 
     loop {
-        let readline = rl.readline("lox >>");
+        let readline = rl.readline("lox>> ");
 
         match readline {
             Ok(line) => {
                 rl.add_history_entry(line.as_str())?;
-                println!("Line: {}", line);
+
+                if line == "exit" {
+                    break;
+                }
+
+                let mut compiler =
+                    lox_compiler::Compiler::new_from_source(&line).expect("compilation failed");
+                let _ = compiler.compile();
+                let bytecode = compiler.bytecode();
+
+                let _ = vm.eval(bytecode).expect("eval failed");
             }
             Err(ReadlineError::Interrupted) => {
                 println!("CTRL-C");
