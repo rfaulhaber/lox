@@ -24,8 +24,12 @@ pub enum Commands {
     },
     #[command(about = "run repl")]
     Repl {
+        #[arg(short, long)]
         #[arg(default_value_t = VmOptions::Bytecode)]
         vm: VmOptions,
+        #[arg(short, long)]
+        #[arg(help = "Print bytecode with each line")]
+        print_bytecode: bool,
     },
     #[command(arg_required_else_help = true)]
     Eval {
@@ -51,7 +55,11 @@ impl std::fmt::Display for VmOptions {
     }
 }
 
-pub fn repl() -> RlResult<()> {
+pub struct ReplOptions {
+    pub print_bytecode: bool,
+}
+
+pub fn repl(options: ReplOptions) -> RlResult<()> {
     let mut rl = DefaultEditor::new()?;
 
     let mut vm = lox_vm::Interpreter::new();
@@ -67,9 +75,18 @@ pub fn repl() -> RlResult<()> {
                     break;
                 }
 
-                let compiler = lox_compiler::Compiler::new_from_source(&line)
-                    .expect("could not create compiler");
+                let compiler = match lox_compiler::Compiler::new_from_source(&line) {
+                    Ok(comp) => comp,
+                    Err(e) => {
+                        eprintln!("Compiler error: {}", e);
+                        continue;
+                    }
+                };
                 let bytecode = compiler.compile().expect("compilation failed");
+
+                if options.print_bytecode {
+                    println!("{}", bytecode.disassemble().join("\n"));
+                }
 
                 let _ = vm.eval(bytecode).expect("eval failed");
             }

@@ -20,9 +20,11 @@ fn main() {
 
             println!("{}", dsm.join("\n"));
         }
-        Commands::Repl { vm: _ } => {
-            lox::repl().expect("repl failed :( rewrite to find out why! :)")
-        }
+        Commands::Repl {
+            vm: _,
+            print_bytecode,
+        } => lox::repl(lox::ReplOptions { print_bytecode })
+            .expect("repl failed :( rewrite to find out why! :)"),
         Commands::Eval { vm, file } => {
             let file_contents = std::fs::read_to_string(file).expect("Could not open file");
             match vm {
