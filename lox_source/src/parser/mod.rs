@@ -80,7 +80,7 @@ impl<'p> Parser<'p> {
             }
             Some(t) if t.kind == TokenType::Var => self.parse_decl_stmt(),
             Some(_) => Ok(Decl::Stmt(self.parse_stmt()?)),
-            None => todo!(),
+            None => Err(ParseError::UnexpectedEndOfInput),
         }
     }
 
@@ -95,7 +95,7 @@ impl<'p> Parser<'p> {
                 TokenType::Return => self.parse_return(),
                 _ => self.parse_expr_stmt(),
             },
-            None => todo!(),
+            None => Err(ParseError::UnexpectedEndOfInput),
         }
     }
 
@@ -252,10 +252,7 @@ impl<'p> Parser<'p> {
                 Ok(Decl::Var(identifier, Some(expr)))
             }
             Some(t) if t.kind == TokenType::Semicolon => Ok(Decl::Var(identifier, None)),
-            Some(_) => {
-                todo!("Unexpected token")
-            }
-            None => todo!(),
+            Some(_) | None => Err(ParseError::UnexpectedEndOfInput),
         }
     }
 
@@ -622,7 +619,7 @@ impl<'p> Parser<'p> {
                     t.kind, t.location
                 ),
             },
-            None => todo!("throw error"),
+            None => Err(ParseError::UnexpectedEndOfInput),
         }
     }
 
