@@ -108,14 +108,34 @@ pub fn repl(options: ReplOptions) -> RlResult<()> {
     Ok(())
 }
 
-fn eval_file(path: String) -> Result<()> {
-    let vm = lox_vm::Interpreter::new();
+pub fn eval_file(vm: VmOptions, file: PathBuf) -> Result<()> {
+    let file_contents = std::fs::read_to_string(file).expect("Could not open file");
+    match vm {
+        VmOptions::Bytecode => {
+            let compiler = lox_compiler::Compiler::new_from_source(&file_contents)?;
 
-    let mut source_file = std::fs::File::open(path)?;
-    let mut source_buf = String::new();
-    source_file.read_to_string(&mut source_buf)?;
+            let bytecode = compiler.compile().expect("compilation failed");
 
-    let program = lox_source::parser::Parser::from_source(&source_buf).parse()?;
+            let mut vm = lox_vm::Interpreter::new();
 
-    todo!();
+            let _ = vm.eval(bytecode)?;
+
+            Ok(())
+        }
+        VmOptions::TreeWalk => todo!("treewalk eval not implemented"),
+    }
+}
+
+pub fn disassemble(path: PathBuf) -> Result<()> {
+    let file_contents = std::fs::read_to_string(path).expect("Could not open file");
+
+    let compiler = lox_compiler::Compiler::new_from_source(&file_contents)?;
+
+    let res = compiler.compile().expect("compilation failed");
+
+    let dsm = res.disassemble();
+
+    println!("{}", dsm.join("\n"));
+
+    Ok(())
 }

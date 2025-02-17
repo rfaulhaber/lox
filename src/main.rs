@@ -8,38 +8,12 @@ fn main() {
     let args = Cli::parse();
 
     match args.command {
-        Commands::Disassemble { file } => {
-            let file_contents = std::fs::read_to_string(file).expect("Could not open file");
-
-            let compiler = lox_compiler::Compiler::new_from_source(&file_contents)
-                .expect("could not compile file");
-
-            let res = compiler.compile().expect("compilation failed");
-
-            let dsm = res.disassemble();
-
-            println!("{}", dsm.join("\n"));
-        }
+        Commands::Disassemble { file } => lox::disassemble(file).expect("disassembly failed"),
         Commands::Repl {
             vm: _,
             print_bytecode,
         } => lox::repl(lox::ReplOptions { print_bytecode })
             .expect("repl failed :( rewrite to find out why! :)"),
-        Commands::Eval { vm, file } => {
-            let file_contents = std::fs::read_to_string(file).expect("Could not open file");
-            match vm {
-                lox::VmOptions::Bytecode => {
-                    let compiler = lox_compiler::Compiler::new_from_source(&file_contents)
-                        .expect("could not compile file");
-
-                    let bytecode = compiler.compile().expect("compilation failed");
-
-                    let mut vm = lox_vm::Interpreter::new();
-
-                    let _ = vm.eval(bytecode).expect("eval failed");
-                }
-                lox::VmOptions::TreeWalk => todo!("treewalk eval not implemented"),
-            }
-        }
+        Commands::Eval { vm, file } => lox::eval_file(vm, file).expect("eval failed"),
     }
 }
