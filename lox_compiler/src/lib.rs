@@ -19,9 +19,18 @@ pub enum CompilerError {
 
 pub type CompilerResult = Result<Chunk, CompilerError>;
 
+pub const LOCALS_COUNT: u8 = u8::MAX;
+
+pub struct Local {
+    name: String,
+    depth: usize,
+}
+
 pub struct Compiler {
     ast: Program,
     chunk: Chunk,
+    locals: Vec<Local>,
+    scope_depth: usize,
 }
 
 impl<'c> Compiler {
@@ -29,6 +38,8 @@ impl<'c> Compiler {
         Self {
             ast: source,
             chunk: Chunk::new(),
+            locals: Vec::with_capacity(LOCALS_COUNT.into()),
+            scope_depth: 0,
         }
     }
 
@@ -57,6 +68,14 @@ impl<'c> Compiler {
     fn write_string(&mut self, string: String) {
         let idx = self.chunk.add_string(string);
         self.chunk.add_op(Op::String(idx))
+    }
+
+    fn begin_scope(&mut self) {
+        self.scope_depth += 1;
+    }
+
+    fn end_scope(&mut self) {
+        self.scope_depth -= 1;
     }
 }
 
@@ -203,7 +222,7 @@ impl Visitor for Compiler {
 
     fn visit_stmt(&mut self, stmt: Stmt) -> Self::Value {
         match stmt {
-            Stmt::Block(_) => todo!(),
+            Stmt::Block(decls) => self.visit_block(decls),
             Stmt::Expr(expr) => {
                 let _ = self.visit_expr(expr)?;
                 self.chunk.add_op(Op::Pop);
@@ -223,7 +242,15 @@ impl Visitor for Compiler {
     }
 
     fn visit_block(&mut self, block: Vec<Decl>) -> Self::Value {
-        todo!()
+        self.begin_scope();
+
+        for decl in block {
+            self.visit_declaration(decl)?;
+        }
+
+        self.end_scope();
+
+        Ok(())
     }
 
     fn visit_if_stmt(&mut self, cond: Expr, stmt: Stmt, else_stmt: Option<Stmt>) -> Self::Value {
@@ -384,7 +411,11 @@ breakfast = "beignets with " + beverage;
 
 print breakfast;"#;
 
-        let result = Compiler::new_from_source(input).unwrap().compile().unwrap().disassemble();
+        let result = Compiler::new_from_source(input)
+            .unwrap()
+            .compile()
+            .unwrap()
+            .disassemble();
 
         insta::assert_yaml_snapshot!(result);
     }

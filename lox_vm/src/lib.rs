@@ -239,7 +239,7 @@ impl Interpreter {
 
     fn step_n(&mut self, n: usize) -> InterpretResult {
         for _ in 0..n {
-            let res = self.step()?;
+            let _ = self.step()?;
         }
 
         Ok(())
