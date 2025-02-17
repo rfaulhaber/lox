@@ -38,14 +38,10 @@ impl<'c> Compiler {
         Ok(Compiler::new(program))
     }
 
-    pub fn compile(&mut self) -> Result<(), CompilerError> {
+    pub fn compile(mut self) -> Result<Chunk, CompilerError> {
         let _ = self.visit_program(self.ast.clone())?;
 
-        Ok(())
-    }
-
-    pub fn bytecode(self) -> Chunk {
-        self.chunk
+        Ok(self.chunk)
     }
 
     fn write_int(&mut self, int: i64) {
@@ -266,9 +262,7 @@ mod test {
         expected.add_op(Op::Integer(0));
         expected.add_op(Op::Pop);
 
-        let mut compiler = Compiler::new_from_source(input).unwrap();
-        let _ = compiler.compile().unwrap();
-        let result = compiler.bytecode();
+        let result = Compiler::new_from_source(input).unwrap().compile().unwrap();
 
         assert_eq!(result.disassemble(), expected.disassemble());
     }
@@ -281,9 +275,7 @@ mod test {
         expected.add_op(Op::Integer(0));
         expected.add_op(Op::Pop);
 
-        let mut compiler = Compiler::new_from_source(input).unwrap();
-        let _ = compiler.compile().unwrap();
-        let result = compiler.bytecode();
+        let result = Compiler::new_from_source(input).unwrap().compile().unwrap();
 
         assert_eq!(result.disassemble(), expected.disassemble());
     }
@@ -297,9 +289,7 @@ mod test {
         expected.add_op(Op::Negate);
         expected.add_op(Op::Pop);
 
-        let mut compiler = Compiler::new_from_source(input).unwrap();
-        let _ = compiler.compile().unwrap();
-        let result = compiler.bytecode();
+        let result = Compiler::new_from_source(input).unwrap().compile().unwrap();
 
         assert_eq!(result.disassemble(), expected.disassemble());
     }
@@ -316,9 +306,7 @@ mod test {
         expected.add_op(Op::Add);
         expected.add_op(Op::Pop);
 
-        let mut compiler = Compiler::new_from_source(input).unwrap();
-        let _ = compiler.compile().unwrap();
-        let result = compiler.bytecode();
+        let result = Compiler::new_from_source(input).unwrap().compile().unwrap();
 
         assert_eq!(result.disassemble(), expected.disassemble());
     }
@@ -335,9 +323,7 @@ mod test {
         expected.add_op(Op::Subtract);
         expected.add_op(Op::Pop);
 
-        let mut compiler = Compiler::new_from_source(input).unwrap();
-        let _ = compiler.compile().unwrap();
-        let result = compiler.bytecode();
+        let result = Compiler::new_from_source(input).unwrap().compile().unwrap();
 
         assert_eq!(result.disassemble(), expected.disassemble());
     }
@@ -354,9 +340,7 @@ mod test {
         expected.add_op(Op::Multiply);
         expected.add_op(Op::Pop);
 
-        let mut compiler = Compiler::new_from_source(input).unwrap();
-        let _ = compiler.compile().unwrap();
-        let result = compiler.bytecode();
+        let result = Compiler::new_from_source(input).unwrap().compile().unwrap();
 
         assert_eq!(result.disassemble(), expected.disassemble());
     }
@@ -373,9 +357,7 @@ mod test {
         expected.add_op(Op::Divide);
         expected.add_op(Op::Pop);
 
-        let mut compiler = Compiler::new_from_source(input).unwrap();
-        let _ = compiler.compile().unwrap();
-        let result = compiler.bytecode();
+        let result = Compiler::new_from_source(input).unwrap().compile().unwrap();
 
         assert_eq!(result.disassemble(), expected.disassemble());
     }
@@ -389,9 +371,7 @@ mod test {
         expected.add_op(Op::Not);
         expected.add_op(Op::Pop);
 
-        let mut compiler = Compiler::new_from_source(input).unwrap();
-        let _ = compiler.compile().unwrap();
-        let result = compiler.bytecode();
+        let result = Compiler::new_from_source(input).unwrap().compile().unwrap();
 
         assert_eq!(result.disassemble(), expected.disassemble());
     }
@@ -404,9 +384,7 @@ breakfast = "beignets with " + beverage;
 
 print breakfast;"#;
 
-        let mut compiler = Compiler::new_from_source(input).unwrap();
-        let _ = compiler.compile().unwrap();
-        let result = compiler.bytecode().disassemble();
+        let result = Compiler::new_from_source(input).unwrap().compile().unwrap().disassemble();
 
         insta::assert_yaml_snapshot!(result);
     }

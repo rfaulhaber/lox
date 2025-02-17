@@ -11,26 +11,26 @@ fn main() {
         Commands::Disassemble { file } => {
             let file_contents = std::fs::read_to_string(file).expect("Could not open file");
 
-            let mut compiler = lox_compiler::Compiler::new_from_source(&file_contents)
+            let compiler = lox_compiler::Compiler::new_from_source(&file_contents)
                 .expect("could not compile file");
 
-            let _ = compiler.compile().expect("compilation failed");
+            let res = compiler.compile().expect("compilation failed");
 
-            let dsm = compiler.bytecode().disassemble();
+            let dsm = res.disassemble();
 
             println!("{}", dsm.join("\n"));
         }
-        Commands::Repl { vm } => lox::repl().expect("repl failed :( rewrite to find out why! :)"),
+        Commands::Repl { vm: _ } => {
+            lox::repl().expect("repl failed :( rewrite to find out why! :)")
+        }
         Commands::Eval { vm, file } => {
             let file_contents = std::fs::read_to_string(file).expect("Could not open file");
             match vm {
                 lox::VmOptions::Bytecode => {
-                    let mut compiler = lox_compiler::Compiler::new_from_source(&file_contents)
+                    let compiler = lox_compiler::Compiler::new_from_source(&file_contents)
                         .expect("could not compile file");
 
-                    let _ = compiler.compile().expect("compilation failed");
-
-                    let bytecode = compiler.bytecode();
+                    let bytecode = compiler.compile().expect("compilation failed");
 
                     let mut vm = lox_vm::Interpreter::new();
 

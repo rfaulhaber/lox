@@ -67,10 +67,9 @@ pub fn repl() -> RlResult<()> {
                     break;
                 }
 
-                let mut compiler =
-                    lox_compiler::Compiler::new_from_source(&line).expect("compilation failed");
-                let _ = compiler.compile();
-                let bytecode = compiler.bytecode();
+                let compiler = lox_compiler::Compiler::new_from_source(&line)
+                    .expect("could not create compiler");
+                let bytecode = compiler.compile().expect("compilation failed");
 
                 let _ = vm.eval(bytecode).expect("eval failed");
             }
