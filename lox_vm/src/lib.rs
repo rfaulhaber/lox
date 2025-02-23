@@ -26,6 +26,8 @@ pub enum InterpreterError {
     NoValueAtIndex(usize),
     #[error("Undefined variable {0}")]
     UndefinedVariable(String),
+    #[error("Local not found {0}")]
+    LocalNotFound(usize),
 }
 
 #[derive(Debug)]
@@ -109,12 +111,13 @@ impl Interpreter {
     }
 
     fn run(&mut self) -> Result<InterpreterState, InterpreterError> {
-        while self
-            .step()
-            .is_ok_and(|state| state == InterpreterState::Running)
-        {}
-
-        Ok(InterpreterState::Finished)
+        loop {
+            match self.step() {
+                Ok(InterpreterState::Running) => continue,
+                Ok(InterpreterState::Finished) => return Ok(InterpreterState::Finished),
+                Err(e) => return Err(e),
+            }
+        }
     }
 
     fn step(&mut self) -> Result<InterpreterState, InterpreterError> {
@@ -232,17 +235,27 @@ impl Interpreter {
 
                 let _ = self.globals.insert(name, value);
             }
+            Some(Op::GetLocal(index)) => {
+                let value = self.stack.get(index);
+
+                if value.is_none() {
+                    return Err(InterpreterError::LocalNotFound(index));
+                }
+
+                self.stack.push(value.cloned().unwrap());
+            }
+            Some(Op::SetLocal(index)) => {
+                let top = self.stack.get(index);
+
+                if top.is_none() {
+                    return Err(InterpreterError::EmptyStack);
+                }
+
+                self.stack[index] = top.cloned().unwrap();
+            }
         }
 
         Ok(InterpreterState::Running)
-    }
-
-    fn step_n(&mut self, n: usize) -> InterpretResult {
-        for _ in 0..n {
-            let _ = self.step()?;
-        }
-
-        Ok(())
     }
 
     fn next_op(&self) -> Option<Op> {

@@ -1,7 +1,8 @@
 use anyhow::Result;
 use rustyline::{error::ReadlineError, DefaultEditor, Result as RlResult};
-use std::io::Read;
+use std::io::Write;
 use std::path::PathBuf;
+use termcolor::{Color, ColorChoice, ColorSpec, StandardStream, WriteColor};
 
 use clap::{Parser, Subcommand, ValueEnum};
 
@@ -64,6 +65,15 @@ pub fn repl(options: ReplOptions) -> RlResult<()> {
 
     let mut vm = lox_vm::Interpreter::new();
 
+    let mut err_spec = ColorSpec::new();
+    err_spec.set_fg(Some(Color::Red));
+    err_spec.set_bold(true);
+
+    let mut std_spec = ColorSpec::new();
+    std_spec.set_fg(None);
+
+    let mut stdout = StandardStream::stdout(ColorChoice::Always);
+
     loop {
         let readline = rl.readline("lox>> ");
 
@@ -78,17 +88,28 @@ pub fn repl(options: ReplOptions) -> RlResult<()> {
                 let compiler = match lox_compiler::Compiler::new_from_source(&line) {
                     Ok(comp) => comp,
                     Err(e) => {
-                        eprintln!("Compiler error: {}", e);
+                        stdout.set_color(&err_spec)?;
+                        writeln!(&mut stdout, "compile error: {}", e)?;
+                        stdout.reset()?;
+                        stdout.flush()?;
                         continue;
                     }
                 };
                 let bytecode = compiler.compile().expect("compilation failed");
 
                 if options.print_bytecode {
-                    println!("{}", bytecode.disassemble().join("\n"));
+                    writeln!(&mut stdout, "{}", bytecode.disassemble().join("\n"))?;
                 }
 
-                let _ = vm.eval(bytecode).expect("eval failed");
+                match vm.eval(bytecode) {
+                    Err(e) => {
+                        stdout.set_color(&err_spec)?;
+                        writeln!(&mut stdout, "error: {}", e)?;
+                        stdout.reset()?;
+                        stdout.flush()?;
+                    }
+                    _ => {}
+                };
             }
             Err(ReadlineError::Interrupted) => {
                 println!("CTRL-C");

@@ -23,6 +23,8 @@ pub enum Op {
     DefineGlobal(usize),
     GetGlobal(usize),
     SetGlobal(usize),
+    GetLocal(usize),
+    SetLocal(usize),
 }
 
 #[derive(Debug, Clone)]
@@ -150,6 +152,12 @@ impl Chunk {
                         index,
                         self.string_at(*index).unwrap(),
                     ),
+                    Op::GetLocal(index) => format!(
+                        "OP_GET_LOCAL (index={})", index
+                    ),
+                    Op::SetLocal(index) => format!(
+                        "OP_SET_LOCAL (index={})", index
+                    ),
                     Op::Return => "OP_RETURN".into(),
                     Op::Negate => "OP_NEAGATE".into(),
                     Op::Add => "OP_ADD".into(),
@@ -165,6 +173,7 @@ impl Chunk {
                     Op::Less => "OP_LESS".into(),
                     Op::Print => "OP_PRINT".into(),
                     Op::Pop => "OP_POP".into(),
+
                 };
 
                 if let Some((_, source)) = source {

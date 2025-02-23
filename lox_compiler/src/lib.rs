@@ -15,15 +15,21 @@ use thiserror::Error;
 pub enum CompilerError {
     #[error("Encountered parser error {0}")]
     ParserError(#[from] ParseError),
+    #[error("Too many local variables declared")]
+    LocalVariableLimit,
+    #[error("Duplicate variable {0} in scope")]
+    DuplicateVariableInScope(String),
 }
 
 pub type CompilerResult = Result<Chunk, CompilerError>;
 
 pub const LOCALS_COUNT: u8 = u8::MAX;
 
+#[derive(Debug)]
 pub struct Local {
     name: String,
     depth: usize,
+    initialized: bool,
 }
 
 pub struct Compiler {
@@ -75,7 +81,37 @@ impl<'c> Compiler {
     }
 
     fn end_scope(&mut self) {
+        self.locals
+            .iter()
+            .filter(|l| l.depth == self.scope_depth)
+            .for_each(|_| self.chunk.add_op(Op::Pop));
+
         self.scope_depth -= 1;
+    }
+
+    fn add_local(&mut self, name: String) -> usize {
+        let idx = self.locals.len();
+        self.locals.insert(
+            idx,
+            Local {
+                name,
+                depth: self.scope_depth,
+                initialized: false,
+            },
+        );
+
+        idx
+    }
+
+    fn find_local(&mut self, name: &String) -> Option<(usize, &Local)> {
+        if self.scope_depth == 0 {
+            return None;
+        }
+
+        self.locals
+            .iter()
+            .enumerate()
+            .find(|(_, local)| local.name == *name && local.depth == self.scope_depth)
     }
 }
 
@@ -93,8 +129,17 @@ impl Visitor for Compiler {
             Expr::Get(_, _) => todo!(),
             Expr::Set(_, _, _) => todo!(),
             Expr::Var(id) => {
-                let idx = self.chunk.add_string(id.name);
-                self.chunk.add_op(Op::GetGlobal(idx));
+                let name = id.name;
+
+                let existing_local = self.find_local(&name);
+
+                if let Some((idx, _)) = existing_local {
+                    self.chunk.add_op(Op::GetLocal(idx));
+                } else {
+                    let idx = self.chunk.add_string(name);
+                    self.chunk.add_op(Op::GetGlobal(idx));
+                }
+
                 Ok(())
             }
             Expr::Assignment(id, expr) => self.visit_assignment_expr(id, *expr),
@@ -162,8 +207,16 @@ impl Visitor for Compiler {
     fn visit_assignment_expr(&mut self, id: Identifier, expr: Expr) -> Self::Value {
         let _ = self.visit_expr(expr)?;
 
-        let idx = self.chunk.add_string(id.name);
-        self.chunk.add_op(Op::SetGlobal(idx));
+        let name = id.name;
+
+            let existing_local = self.find_local(&name);
+            if let Some((idx, _)) = existing_local {
+                self.locals[idx].initialized = true;
+                self.chunk.add_op(Op::SetLocal(idx));
+            } else {
+                let idx = self.chunk.add_string(name);
+                self.chunk.add_op(Op::SetGlobal(idx));
+            }
 
         Ok(())
     }
@@ -202,8 +255,25 @@ impl Visitor for Compiler {
                     }
                 };
 
-                let idx = self.chunk.add_string(id.name);
-                self.chunk.add_op(Op::DefineGlobal(idx));
+                let name = id.name;
+
+                if self.scope_depth == 0 {
+                    let idx = self.chunk.add_string(name);
+                    self.chunk.add_op(Op::DefineGlobal(idx));
+                } else {
+                    if self.locals.len() == LOCALS_COUNT.into() {
+                        return Err(CompilerError::LocalVariableLimit);
+                    }
+
+                    let existing_local = self.find_local(&name);
+
+                    if existing_local.is_some() {
+                        return Err(CompilerError::DuplicateVariableInScope(name));
+                    }
+
+                    let idx = self.add_local(name);
+                    self.chunk.add_op(Op::SetLocal(idx));
+                }
 
                 Ok(())
             }
