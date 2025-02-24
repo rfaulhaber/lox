@@ -47,7 +47,7 @@ impl<'p> Parser<'p> {
         }
     }
 
-    pub fn from_source(source: &'p str) -> Self {
+    pub fn from_source<S: Into<&'p str>>(source: S) -> Self {
         Self {
             lexer: Lexer::new(source).peekable(),
         }

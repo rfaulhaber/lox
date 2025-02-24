@@ -5,8 +5,8 @@ pub struct Scanner<'s> {
 }
 
 impl<'s> Scanner<'s> {
-    pub fn new(input: &'s str) -> Scanner<'s> {
-        Scanner { input, pos: 0 }
+    pub fn new<S: Into<&'s str>>(input: S) -> Scanner<'s> {
+        Scanner { input: input.into(), pos: 0 }
     }
 
     fn advance(&mut self) -> Option<(usize, char)> {

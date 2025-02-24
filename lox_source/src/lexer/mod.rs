@@ -13,7 +13,7 @@ pub struct Lexer<'l> {
 }
 
 impl<'l> Lexer<'l> {
-    pub fn new(source: &'l str) -> Lexer<'l> {
+    pub fn new<S: Into<&'l str>>(source: S) -> Lexer<'l> {
         Lexer {
             scanner: Scanner::new(source),
         }

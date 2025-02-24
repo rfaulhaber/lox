@@ -103,7 +103,17 @@ impl<'c> Compiler {
         idx
     }
 
-    fn find_local(&mut self, name: &String) -> Option<(usize, &Local)> {
+    fn find_local(&mut self, name: &String) -> Option<&Local> {
+        if self.scope_depth == 0 {
+            return None;
+        }
+
+        self.locals
+            .iter()
+            .find(|local| local.name == *name && local.depth == self.scope_depth)
+    }
+
+    fn lookup_local(&mut self, name: &String) -> Option<(usize, &Local)> {
         if self.scope_depth == 0 {
             return None;
         }
@@ -111,7 +121,8 @@ impl<'c> Compiler {
         self.locals
             .iter()
             .enumerate()
-            .find(|(_, local)| local.name == *name && local.depth == self.scope_depth)
+            .rev()
+            .find(|(_, local)| local.name == *name)
     }
 }
 
@@ -131,7 +142,7 @@ impl Visitor for Compiler {
             Expr::Var(id) => {
                 let name = id.name;
 
-                let existing_local = self.find_local(&name);
+                let existing_local = self.lookup_local(&name);
 
                 if let Some((idx, _)) = existing_local {
                     self.chunk.add_op(Op::GetLocal(idx));
@@ -209,14 +220,14 @@ impl Visitor for Compiler {
 
         let name = id.name;
 
-            let existing_local = self.find_local(&name);
-            if let Some((idx, _)) = existing_local {
-                self.locals[idx].initialized = true;
-                self.chunk.add_op(Op::SetLocal(idx));
-            } else {
-                let idx = self.chunk.add_string(name);
-                self.chunk.add_op(Op::SetGlobal(idx));
-            }
+        let existing_local = self.lookup_local(&name);
+        if let Some((idx, _)) = existing_local {
+            self.locals[idx].initialized = true;
+            self.chunk.add_op(Op::SetLocal(idx));
+        } else {
+            let idx = self.chunk.add_string(name);
+            self.chunk.add_op(Op::SetGlobal(idx));
+        }
 
         Ok(())
     }
@@ -230,13 +241,11 @@ impl Visitor for Compiler {
     }
 
     fn visit_program(&mut self, program: Program) -> Self::Value {
-        let result = program
+        program
             .declarations
             .iter()
             .map(|d| self.visit_declaration(d.clone()))
-            .last();
-
-        result.unwrap_or(Ok(()))
+            .collect()
     }
 
     fn visit_declaration(&mut self, decl: Decl) -> Self::Value {
@@ -474,12 +483,33 @@ mod test {
     }
 
     #[test]
-    fn snapshots() {
+    fn global_variable_snapshot() {
         let input = r#"var breakfast = "beignets";
 var beverage = "cafe au lait";
 breakfast = "beignets with " + beverage;
 
 print breakfast;"#;
+
+        let result = Compiler::new_from_source(input)
+            .unwrap()
+            .compile()
+            .unwrap()
+            .disassemble();
+
+        insta::assert_yaml_snapshot!(result);
+    }
+
+    #[test]
+    fn local_variable_snapshot() {
+        let input = r#"var test = "global";
+{
+    var test = "inner";
+    {
+        var test = "inner2";
+        var innermost = "innermost";
+    }
+}
+ "#;
 
         let result = Compiler::new_from_source(input)
             .unwrap()

@@ -112,7 +112,7 @@ impl<'t> TestCase<'t> {
 
         let interpreter = Interpreter::new(&b""[..], String::new(), code.clone(), name);
 
-        let ast = Parser::from_source(&code).parse()?;
+        let ast = Parser::from_source(&*code).parse()?;
 
         Ok(Self {
             expected,
