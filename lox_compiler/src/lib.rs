@@ -233,7 +233,16 @@ impl Visitor for Compiler {
     }
 
     fn visit_logical_expr(&mut self, left: Expr, op: LogicalOperator, right: Expr) -> Self::Value {
-        todo!()
+        let _ = self.visit_expr(left)?;
+
+        match op {
+            LogicalOperator::And => {
+                todo!();
+            }
+            LogicalOperator::Or => {
+                todo!();
+            }
+        };
     }
 
     fn visit_call_expr(&mut self, callee: Expr, arguments: Vec<Expr>) -> Self::Value {
@@ -315,7 +324,9 @@ impl Visitor for Compiler {
                 Ok(())
             }
             Stmt::Return(_) => todo!(),
-            Stmt::If(_, _, _) => todo!(),
+            Stmt::If(cond, stmt, else_stmt) => {
+                self.visit_if_stmt(cond, *stmt, else_stmt.map(|v| *v))
+            }
             Stmt::While(_, _) => todo!(),
         }
     }
@@ -333,7 +344,31 @@ impl Visitor for Compiler {
     }
 
     fn visit_if_stmt(&mut self, cond: Expr, stmt: Stmt, else_stmt: Option<Stmt>) -> Self::Value {
-        todo!()
+        let _ = self.visit_expr(cond)?;
+
+        // TODO check this jump math it doesn't look right
+        // TODO clean up
+
+        let then_jump = self.chunk.code_len();
+
+        self.visit_stmt(stmt)?;
+
+        let jump = self.chunk.code_len() - then_jump;
+
+        if let Some(stmt) = else_stmt {
+            self.chunk.insert_op(then_jump, Op::JumpIfFalse(jump + 2));
+            self.chunk.insert_op(then_jump + 1, Op::Pop);
+            let else_jump = self.chunk.code_len();
+            self.visit_stmt(stmt)?;
+            let else_jump_pos = self.chunk.code_len() - else_jump;
+            self.chunk.insert_op(else_jump, Op::Jump(else_jump_pos + 1));
+            self.chunk.insert_op(else_jump + 1, Op::Pop);
+        } else {
+            self.chunk.insert_op(then_jump, Op::JumpIfFalse(jump + 1));
+            self.chunk.insert_op(then_jump + 1, Op::Pop);
+        }
+
+        Ok(())
     }
 
     fn visit_while_stmt(&mut self, cond: Expr, body: Stmt) -> Self::Value {
@@ -510,6 +545,42 @@ print breakfast;"#;
     }
 }
  "#;
+
+        let result = Compiler::new_from_source(input)
+            .unwrap()
+            .compile()
+            .unwrap()
+            .disassemble();
+
+        insta::assert_yaml_snapshot!(result);
+    }
+
+    #[test]
+    fn conditional_if() {
+        let input = r#"var x = false;
+if (x) {
+    print "x";
+}
+"#;
+
+        let result = Compiler::new_from_source(input)
+            .unwrap()
+            .compile()
+            .unwrap()
+            .disassemble();
+
+        insta::assert_yaml_snapshot!(result);
+    }
+
+    #[test]
+    fn conditional_else() {
+        let input = r#"var x = false;
+if (x) {
+    print "fizz";
+} else {
+    print "buzz";
+}
+"#;
 
         let result = Compiler::new_from_source(input)
             .unwrap()

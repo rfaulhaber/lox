@@ -25,6 +25,8 @@ pub enum Op {
     SetGlobal(usize),
     GetLocal(usize),
     SetLocal(usize),
+    JumpIfFalse(usize),
+    Jump(usize),
 }
 
 #[derive(Debug, Clone)]
@@ -115,6 +117,18 @@ impl Chunk {
         self.strings.get(index).cloned()
     }
 
+    pub fn code_len(&self) -> usize {
+        self.code.len()
+    }
+
+    pub fn set_op(&mut self, index: usize, op: Op) {
+        self.code[index] = op;
+    }
+
+    pub fn insert_op(&mut self, index: usize, op: Op) {
+        self.code.insert(index, op);
+    }
+
     pub fn disassemble(&self) -> Vec<String> {
         self.code
             .iter()
@@ -152,12 +166,8 @@ impl Chunk {
                         index,
                         self.string_at(*index).unwrap(),
                     ),
-                    Op::GetLocal(index) => format!(
-                        "OP_GET_LOCAL (index={})", index
-                    ),
-                    Op::SetLocal(index) => format!(
-                        "OP_SET_LOCAL (index={})", index
-                    ),
+                    Op::GetLocal(index) => format!("OP_GET_LOCAL (index={})", index),
+                    Op::SetLocal(index) => format!("OP_SET_LOCAL (index={})", index),
                     Op::Return => "OP_RETURN".into(),
                     Op::Negate => "OP_NEAGATE".into(),
                     Op::Add => "OP_ADD".into(),
@@ -173,7 +183,8 @@ impl Chunk {
                     Op::Less => "OP_LESS".into(),
                     Op::Print => "OP_PRINT".into(),
                     Op::Pop => "OP_POP".into(),
-
+                    Op::JumpIfFalse(pos) => format!("OP_JUMP_IF_FALSE (pos={})", pos),
+                    Op::Jump(pos) => format!("OP_JUMP (pos={})", pos),
                 };
 
                 if let Some((_, source)) = source {

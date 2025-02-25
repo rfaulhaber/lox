@@ -253,6 +253,21 @@ impl Interpreter {
 
                 self.stack[index] = top.cloned().unwrap();
             }
+            Some(Op::JumpIfFalse(pos)) => {
+                let value = self.stack.last();
+
+                let is_falsy = match value {
+                    Some(v) => v.is_falsy(),
+                    None => return Err(InterpreterError::EmptyStack),
+                };
+
+                if is_falsy {
+                    self.ip += pos;
+                }
+            }
+            Some(Op::Jump(pos)) => {
+                self.ip += pos;
+            }
         }
 
         Ok(InterpreterState::Running)
