@@ -39,6 +39,12 @@ pub struct Compiler {
     scope_depth: usize,
 }
 
+enum JumpType {
+    JumpIfFalse,
+    JumpIfFalseWithExtraOffset,
+    Jump,
+}
+
 impl<'c> Compiler {
     pub fn new(source: Program) -> Self {
         Self {
@@ -123,6 +129,28 @@ impl<'c> Compiler {
             .enumerate()
             .rev()
             .find(|(_, local)| local.name == *name)
+    }
+
+    fn jump_around<F>(&mut self, jump_type: JumpType, func: F) -> Result<(), CompilerError>
+    where
+        F: FnOnce(&mut Compiler) -> Result<(), CompilerError>,
+    {
+        let start_pos = self.chunk.code_len();
+
+        let _ = func(self)?;
+
+        let dist = self.chunk.code_len() - start_pos;
+
+        let op = match jump_type {
+            JumpType::JumpIfFalse => Op::JumpIfFalse(dist + 1),
+            JumpType::JumpIfFalseWithExtraOffset => Op::JumpIfFalse(dist + 2),
+            JumpType::Jump => Op::Jump(dist + 1),
+        };
+
+        self.chunk.insert_op(start_pos, op);
+        self.chunk.insert_op(start_pos + 1, Op::Pop);
+
+        Ok(())
     }
 }
 
@@ -237,12 +265,23 @@ impl Visitor for Compiler {
 
         match op {
             LogicalOperator::And => {
-                todo!();
+                self.jump_around(JumpType::JumpIfFalse, |compiler| compiler.visit_expr(right))?;
             }
             LogicalOperator::Or => {
-                todo!();
+                self.chunk.add_op(Op::JumpIfFalse(1));
+                let jump_pos = self.chunk.code_len();
+
+                self.chunk.add_op(Op::Pop);
+
+                let _ = self.visit_expr(right)?;
+
+                let dist = self.chunk.code_len() - jump_pos;
+
+                self.chunk.insert_op(jump_pos, Op::Jump(dist));
             }
         };
+
+        Ok(())
     }
 
     fn visit_call_expr(&mut self, callee: Expr, arguments: Vec<Expr>) -> Self::Value {
@@ -346,26 +385,14 @@ impl Visitor for Compiler {
     fn visit_if_stmt(&mut self, cond: Expr, stmt: Stmt, else_stmt: Option<Stmt>) -> Self::Value {
         let _ = self.visit_expr(cond)?;
 
-        // TODO check this jump math it doesn't look right
-        // TODO clean up
+        if let Some(else_stmt) = else_stmt {
+            self.jump_around(JumpType::JumpIfFalseWithExtraOffset, |compiler| {
+                compiler.visit_stmt(stmt)
+            })?;
 
-        let then_jump = self.chunk.code_len();
-
-        self.visit_stmt(stmt)?;
-
-        let jump = self.chunk.code_len() - then_jump;
-
-        if let Some(stmt) = else_stmt {
-            self.chunk.insert_op(then_jump, Op::JumpIfFalse(jump + 2));
-            self.chunk.insert_op(then_jump + 1, Op::Pop);
-            let else_jump = self.chunk.code_len();
-            self.visit_stmt(stmt)?;
-            let else_jump_pos = self.chunk.code_len() - else_jump;
-            self.chunk.insert_op(else_jump, Op::Jump(else_jump_pos + 1));
-            self.chunk.insert_op(else_jump + 1, Op::Pop);
+            self.jump_around(JumpType::Jump, |compiler| compiler.visit_stmt(else_stmt))?;
         } else {
-            self.chunk.insert_op(then_jump, Op::JumpIfFalse(jump + 1));
-            self.chunk.insert_op(then_jump + 1, Op::Pop);
+            self.jump_around(JumpType::JumpIfFalse, |compiler| compiler.visit_stmt(stmt))?;
         }
 
         Ok(())
@@ -518,7 +545,7 @@ mod test {
     }
 
     #[test]
-    fn global_variable_snapshot() {
+    fn snapshot_global_variable() {
         let input = r#"var breakfast = "beignets";
 var beverage = "cafe au lait";
 breakfast = "beignets with " + beverage;
@@ -533,9 +560,8 @@ print breakfast;"#;
 
         insta::assert_yaml_snapshot!(result);
     }
-
     #[test]
-    fn local_variable_snapshot() {
+    fn snapshot_local_variable() {
         let input = r#"var test = "global";
 {
     var test = "inner";
@@ -545,7 +571,6 @@ print breakfast;"#;
     }
 }
  "#;
-
         let result = Compiler::new_from_source(input)
             .unwrap()
             .compile()
@@ -556,7 +581,7 @@ print breakfast;"#;
     }
 
     #[test]
-    fn conditional_if() {
+    fn snapshot_conditional_if() {
         let input = r#"var x = false;
 if (x) {
     print "x";
@@ -573,13 +598,47 @@ if (x) {
     }
 
     #[test]
-    fn conditional_else() {
+    fn snapshot_conditional_else() {
         let input = r#"var x = false;
 if (x) {
     print "fizz";
 } else {
     print "buzz";
 }
+"#;
+
+        let result = Compiler::new_from_source(input)
+            .unwrap()
+            .compile()
+            .unwrap()
+            .disassemble();
+
+        insta::assert_yaml_snapshot!(result);
+    }
+
+    #[test]
+    fn snapshot_conditional_and() {
+        let input = r#"var x = true;
+var bool = x and false;
+
+print bool;
+"#;
+
+        let result = Compiler::new_from_source(input)
+            .unwrap()
+            .compile()
+            .unwrap()
+            .disassemble();
+
+        insta::assert_yaml_snapshot!(result);
+    }
+
+    #[test]
+    fn snapshot_conditional_or() {
+        let input = r#"var x = true;
+var bool = x or false;
+
+print bool;
 "#;
 
         let result = Compiler::new_from_source(input)
