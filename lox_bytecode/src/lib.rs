@@ -27,6 +27,7 @@ pub enum Op {
     SetLocal(usize),
     JumpIfFalse(usize),
     Jump(usize),
+    Loop(usize),
 }
 
 #[derive(Debug, Clone)]
@@ -185,6 +186,7 @@ impl Chunk {
                     Op::Pop => "OP_POP".into(),
                     Op::JumpIfFalse(pos) => format!("OP_JUMP_IF_FALSE (pos={})", pos),
                     Op::Jump(pos) => format!("OP_JUMP (pos={})", pos),
+                    Op::Loop(pos) => format!("OP_LOOP (pos=-{})", pos),
                 };
 
                 if let Some((_, source)) = source {

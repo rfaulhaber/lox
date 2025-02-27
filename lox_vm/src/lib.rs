@@ -268,6 +268,9 @@ impl Interpreter {
             Some(Op::Jump(pos)) => {
                 self.ip += pos;
             }
+            Some(Op::Loop(pos)) => {
+                self.ip -= pos;
+            }
         }
 
         Ok(InterpreterState::Running)

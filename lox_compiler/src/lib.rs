@@ -366,7 +366,7 @@ impl Visitor for Compiler {
             Stmt::If(cond, stmt, else_stmt) => {
                 self.visit_if_stmt(cond, *stmt, else_stmt.map(|v| *v))
             }
-            Stmt::While(_, _) => todo!(),
+            Stmt::While(cond, body) => self.visit_while_stmt(cond, *body),
         }
     }
 
@@ -399,7 +399,19 @@ impl Visitor for Compiler {
     }
 
     fn visit_while_stmt(&mut self, cond: Expr, body: Stmt) -> Self::Value {
-        todo!()
+        let loop_start = self.chunk.code_len();
+
+        let _ = self.visit_expr(cond)?;
+
+        self.jump_around(JumpType::JumpIfFalseWithExtraOffset, |compiler| {
+            compiler.visit_stmt(body)
+        })?;
+
+        let offset = self.chunk.code_len() - loop_start + 1;
+        self.chunk.add_op(Op::Loop(offset));
+        self.chunk.add_op(Op::Pop);
+
+        Ok(())
     }
 
     fn visit_func_declaration(
@@ -641,6 +653,22 @@ var bool = x or false;
 print bool;
 "#;
 
+        let result = Compiler::new_from_source(input)
+            .unwrap()
+            .compile()
+            .unwrap()
+            .disassemble();
+
+        insta::assert_yaml_snapshot!(result);
+    }
+
+    #[test]
+    fn snapshot_while() {
+        let input = r#"var x = 5;
+while (x > 0) {
+    print x;
+}
+"#;
         let result = Compiler::new_from_source(input)
             .unwrap()
             .compile()
