@@ -121,6 +121,7 @@ impl Interpreter {
     }
 
     fn step(&mut self) -> Result<InterpreterState, InterpreterError> {
+        println!("{} {:?}", self.ip, self.stack);
         let op = self.next_op_and_advance();
 
         match op {

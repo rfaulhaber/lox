@@ -30,12 +30,15 @@ pub enum Commands {
         vm: VmOptions,
         #[arg(short, long)]
         #[arg(help = "Print bytecode with each line")]
-        print_bytecode: bool,
+        bytecode: bool,
     },
     #[command(arg_required_else_help = true)]
     Eval {
         #[arg(required = true)]
         file: PathBuf,
+        #[arg(short, long)]
+        #[arg(help = "Print bytecode with each line")]
+        bytecode: bool,
         #[arg(default_value_t = VmOptions::Bytecode)]
         vm: VmOptions,
     },
@@ -57,7 +60,7 @@ impl std::fmt::Display for VmOptions {
 }
 
 pub struct ReplOptions {
-    pub print_bytecode: bool,
+    pub bytecode: bool,
 }
 
 pub fn repl(options: ReplOptions) -> RlResult<()> {
@@ -97,7 +100,7 @@ pub fn repl(options: ReplOptions) -> RlResult<()> {
                 };
                 let bytecode = compiler.compile().expect("compilation failed");
 
-                if options.print_bytecode {
+                if options.bytecode {
                     writeln!(&mut stdout, "{}", bytecode.disassemble().join("\n"))?;
                 }
 
@@ -129,13 +132,20 @@ pub fn repl(options: ReplOptions) -> RlResult<()> {
     Ok(())
 }
 
-pub fn eval_file(vm: VmOptions, file: PathBuf) -> Result<()> {
+pub fn eval_file(vm: VmOptions, print_bytecode: bool, file: PathBuf) -> Result<()> {
     let file_contents = std::fs::read_to_string(file).expect("Could not open file");
+
+    let mut stdout = StandardStream::stdout(ColorChoice::Always);
+
     match vm {
         VmOptions::Bytecode => {
             let compiler = lox_compiler::Compiler::new_from_source(&file_contents)?;
 
             let bytecode = compiler.compile().expect("compilation failed");
+
+            if print_bytecode {
+                writeln!(&mut stdout, "{}", bytecode.disassemble().join("\n"))?;
+            }
 
             let mut vm = lox_vm::Interpreter::new();
 

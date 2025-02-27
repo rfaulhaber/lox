@@ -9,11 +9,8 @@ fn main() {
 
     match args.command {
         Commands::Disassemble { file } => lox::disassemble(file).expect("disassembly failed"),
-        Commands::Repl {
-            vm: _,
-            print_bytecode,
-        } => lox::repl(lox::ReplOptions { print_bytecode })
+        Commands::Repl { vm: _, bytecode } => lox::repl(lox::ReplOptions { bytecode })
             .expect("repl failed :( rewrite to find out why! :)"),
-        Commands::Eval { vm, file } => lox::eval_file(vm, file).expect("eval failed"),
+        Commands::Eval { vm, file, bytecode } => lox::eval_file(vm, bytecode, file).expect("eval failed"),
     }
 }

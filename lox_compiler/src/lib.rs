@@ -677,4 +677,20 @@ while (x > 0) {
 
         insta::assert_yaml_snapshot!(result);
     }
+
+    #[test]
+    fn snapshot_for() {
+        let input = r#"var x = 3;
+for (var i = 0; i < x; i = i + 1) {
+    print i;
+}
+"#;
+        let result = Compiler::new_from_source(input)
+            .unwrap()
+            .compile()
+            .unwrap()
+            .disassemble();
+
+        insta::assert_yaml_snapshot!(result);
+    }
 }
