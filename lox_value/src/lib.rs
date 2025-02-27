@@ -55,6 +55,7 @@ impl std::fmt::Display for Value {
                 Value::Bool(b) => b.to_string(),
                 Value::Nil => String::from("nil"),
                 Value::Object(Object::String(s)) => format!("\"{}\"", s),
+                Value::Object(Object::Function(f)) => format!("<function: {}/{}>", f.name(), f.arity())
             }
         )
     }

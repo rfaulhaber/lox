@@ -246,7 +246,7 @@ impl Interpreter {
                 self.stack.push(value.cloned().unwrap());
             }
             Some(Op::SetLocal(index)) => {
-                let top = self.stack.get(index);
+                let top = self.stack.last();
 
                 if top.is_none() {
                     return Err(InterpreterError::EmptyStack);

@@ -664,11 +664,33 @@ print bool;
 
     #[test]
     fn snapshot_while() {
-        let input = r#"var x = 5;
-while (x > 0) {
-    print x;
+        let input = r#"
+var i = 0;
+while (i < 5) {
+    print i;
+    i = i + 1;
 }
 "#;
+        let result = Compiler::new_from_source(input)
+            .unwrap()
+            .compile()
+            .unwrap()
+            .disassemble();
+
+        insta::assert_yaml_snapshot!(result);
+    }
+
+    #[test]
+    fn snapshot_while_as_for() {
+        let input = r#"
+var x = 3;
+{
+    var i = 0;
+    while (i < x) {
+        print i;
+        i = i + 1;
+    }
+}"#;
         let result = Compiler::new_from_source(input)
             .unwrap()
             .compile()

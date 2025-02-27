@@ -443,6 +443,7 @@ dependencies = [
 name = "lox_value"
 version = "0.1.0"
 dependencies = [
+ "lox_bytecode",
  "thiserror",
 ]
 

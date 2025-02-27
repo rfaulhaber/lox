@@ -1,6 +1,5 @@
 ---
 source: lox_compiler/src/lib.rs
-assertion_line: 694
 expression: result
 ---
 - 0000    OP_INTEGER (index=0) 3
