@@ -1,10 +1,13 @@
 use std::{collections::HashMap, io::Write};
 
-use lox_bytecode;
-use lox_value::{Value, ValueOperatorError};
+use lox_bytecode::{self, Function};
+use lox_value::{Object, Value, ValueOperatorError};
 
 use lox_bytecode::{Chunk, Op};
 use thiserror::Error;
+
+pub const FRAME_MAX: usize = 64;
+pub const STACK_SIZE: usize = FRAME_MAX * u8::MAX as usize;
 
 pub type InterpretResult = Result<(), InterpreterError>;
 
@@ -28,6 +31,10 @@ pub enum InterpreterError {
     UndefinedVariable(String),
     #[error("Local not found {0}")]
     LocalNotFound(usize),
+    #[error("Not enough call frames")]
+    InsufficientCallFrameLength,
+    #[error("{0} is not callable")]
+    ValueNotCallable(String),
 }
 
 #[derive(Debug)]
@@ -72,11 +79,27 @@ impl std::fmt::Display for BinaryOp {
 }
 
 #[derive(Debug)]
-pub struct Interpreter {
-    chunk: Chunk,
+pub struct CallFrame {
+    // function: Function,
+    slots: Vec<Value>,
     ip: usize,
-    stack: Vec<Value>,
+    chunk: Chunk,
+}
+
+impl CallFrame {
+    pub fn new(chunk: Chunk) -> Self {
+        Self {
+            chunk,
+            slots: Vec::with_capacity(FRAME_MAX),
+            ip: 0,
+        }
+    }
+}
+
+#[derive(Debug)]
+pub struct Interpreter {
     globals: HashMap<String, Value>,
+    frames: Vec<CallFrame>,
     mode: InterpreterMode,
 }
 
@@ -94,18 +117,15 @@ impl Interpreter {
     }
 
     pub fn eval(&mut self, chunk: Chunk) -> Result<InterpreterState, InterpreterError> {
-        self.chunk = chunk;
-        self.ip = 0;
+        self.frames.push(CallFrame::new(chunk));
 
         self.run()
     }
 
     fn new_vm(mode: InterpreterMode) -> Self {
         Interpreter {
-            chunk: Chunk::new(),
-            ip: 0,
-            stack: Vec::new(),
             globals: HashMap::new(),
+            frames: Vec::with_capacity(FRAME_MAX),
             mode,
         }
     }
@@ -121,65 +141,68 @@ impl Interpreter {
     }
 
     fn step(&mut self) -> Result<InterpreterState, InterpreterError> {
-        println!("{} {:?}", self.ip, self.stack);
-        let op = self.next_op_and_advance();
+        let op = self.next_op_and_advance()?;
 
         match op {
             Some(Op::Float(index)) => {
-                let constant = self.chunk.float_at(index).unwrap();
-                self.stack.push(Value::from(constant));
+                let constant = self.float_at(index).unwrap();
+                self.stack_push(Value::from(constant));
             }
             Some(Op::Integer(index)) => {
-                let constant = self.chunk.int_at(index).unwrap();
-                self.stack.push(Value::from(constant));
+                let constant = self.int_at(index).unwrap();
+                self.stack_push(Value::from(constant));
             }
             Some(Op::String(index)) => {
-                let constant = self.chunk.string_at(index).unwrap();
-                self.stack.push(Value::from(constant));
+                let constant = self.string_at(index).unwrap();
+                self.stack_push(Value::from(constant));
+            }
+            Some(Op::Fn(index)) => {
+                let constant = self.fn_at(index).unwrap();
+                self.stack_push(Value::from(constant));
             }
             Some(Op::Return) | None => return Ok(InterpreterState::Finished),
-            Some(Op::Negate) => match self.stack.pop() {
-                Some(Value::Number(n)) => self.stack.push(Value::Number(-n)),
+            Some(Op::Negate) => match self.stack_pop() {
+                Some(Value::Number(n)) => self.stack_push(Value::Number(-n)),
                 Some(v) => return Err(InterpreterError::NegateError(v)),
                 None => unreachable!("negate operation found without operand"),
             },
             Some(Op::Add) => {
                 let res = self.binary_op(BinaryOp::Add)?;
-                self.stack.push(res)
+                self.stack_push(res)
             }
             Some(Op::Subtract) => {
                 let res = self.binary_op(BinaryOp::Sub)?;
-                self.stack.push(res)
+                self.stack_push(res)
             }
             Some(Op::Multiply) => {
                 let res = self.binary_op(BinaryOp::Mul)?;
-                self.stack.push(res)
+                self.stack_push(res)
             }
             Some(Op::Divide) => {
                 let res = self.binary_op(BinaryOp::Div)?;
-                self.stack.push(res)
+                self.stack_push(res)
             }
-            Some(Op::True) => self.stack.push(Value::Bool(true)),
-            Some(Op::False) => self.stack.push(Value::Bool(false)),
-            Some(Op::Nil) => self.stack.push(Value::Nil),
-            Some(Op::Not) => match self.stack.pop() {
-                Some(value) => self.stack.push(Value::Bool(value.is_falsy())),
+            Some(Op::True) => self.stack_push(Value::Bool(true)),
+            Some(Op::False) => self.stack_push(Value::Bool(false)),
+            Some(Op::Nil) => self.stack_push(Value::Nil),
+            Some(Op::Not) => match self.stack_pop() {
+                Some(value) => self.stack_push(Value::Bool(value.is_falsy())),
                 None => unreachable!("not operation found without operand"),
             },
             Some(Op::Equal) => {
                 let binary_op = self.binary_op(BinaryOp::Eq)?;
-                self.stack.push(binary_op)
+                self.stack_push(binary_op)
             }
             Some(Op::Greater) => {
                 let binary_op = self.binary_op(BinaryOp::Gt)?;
-                self.stack.push(binary_op)
+                self.stack_push(binary_op)
             }
             Some(Op::Less) => {
                 let binary_op = self.binary_op(BinaryOp::Lt)?;
-                self.stack.push(binary_op)
+                self.stack_push(binary_op)
             }
             Some(Op::Print) => {
-                let value = self.stack.pop();
+                let value = self.stack_pop();
 
                 match value {
                     Some(v) => {
@@ -190,11 +213,11 @@ impl Interpreter {
                 }
             }
             Some(Op::Pop) => {
-                let _ = self.stack.pop();
+                let _ = self.stack_pop();
             }
             Some(Op::DefineGlobal(index)) => {
-                let value = self.stack.pop();
-                let name = match self.chunk.string_at(index) {
+                let value = self.stack_pop();
+                let name = match self.string_at(index) {
                     Some(value) => value,
                     None => return Err(InterpreterError::NoValueAtIndex(index)),
                 };
@@ -207,7 +230,7 @@ impl Interpreter {
                 }
             }
             Some(Op::GetGlobal(index)) => {
-                let name = match self.chunk.string_at(index) {
+                let name = match self.string_at(index) {
                     Some(value) => value,
                     None => return Err(InterpreterError::NoValueAtIndex(index)),
                 };
@@ -217,10 +240,10 @@ impl Interpreter {
                     None => return Err(InterpreterError::UndefinedVariable(name)),
                 };
 
-                self.stack.push(value.clone());
+                self.stack_push(value.clone());
             }
             Some(Op::SetGlobal(index)) => {
-                let name = match self.chunk.string_at(index) {
+                let name = match self.string_at(index) {
                     Some(value) => value,
                     None => return Err(InterpreterError::NoValueAtIndex(index)),
                 };
@@ -229,7 +252,7 @@ impl Interpreter {
                     return Err(InterpreterError::UndefinedVariable(name));
                 }
 
-                let value = match self.stack.pop() {
+                let value = match self.stack_pop() {
                     Some(value) => value,
                     None => return Err(InterpreterError::EmptyStack),
                 };
@@ -237,25 +260,25 @@ impl Interpreter {
                 let _ = self.globals.insert(name, value);
             }
             Some(Op::GetLocal(index)) => {
-                let value = self.stack.get(index);
+                let value = self.stack_get(index);
 
                 if value.is_none() {
                     return Err(InterpreterError::LocalNotFound(index));
                 }
 
-                self.stack.push(value.cloned().unwrap());
+                self.stack_push(value.cloned().unwrap());
             }
             Some(Op::SetLocal(index)) => {
-                let top = self.stack.last();
+                let top = self.stack_top();
 
                 if top.is_none() {
                     return Err(InterpreterError::EmptyStack);
                 }
 
-                self.stack[index] = top.cloned().unwrap();
+                self.stack_set(index, top.cloned().unwrap())?;
             }
             Some(Op::JumpIfFalse(pos)) => {
-                let value = self.stack.last();
+                let value = self.stack_top();
 
                 let is_falsy = match value {
                     Some(v) => v.is_falsy(),
@@ -263,14 +286,13 @@ impl Interpreter {
                 };
 
                 if is_falsy {
-                    self.ip += pos;
+                    self.jump(pos)?;
                 }
             }
-            Some(Op::Jump(pos)) => {
-                self.ip += pos;
-            }
-            Some(Op::Loop(pos)) => {
-                self.ip -= pos;
+            Some(Op::Jump(pos)) => self.jump(pos)?,
+            Some(Op::Loop(pos)) => self.jump_loop(pos)?,
+            Some(Op::Call(arg_count)) => {
+                self.call_fn(arg_count)?;
             }
         }
 
@@ -278,29 +300,35 @@ impl Interpreter {
     }
 
     fn next_op(&self) -> Option<Op> {
-        self.chunk.code_at(self.ip).cloned()
+        self.frames
+            .last()
+            .and_then(|frame| frame.chunk.code_at(frame.ip).cloned())
     }
 
-    fn next_op_and_advance(&mut self) -> Option<Op> {
+    fn next_op_and_advance(&mut self) -> Result<Option<Op>, InterpreterError> {
         let op = self.next_op();
 
         if op.is_some() {
-            self.ip = self.ip + 1;
+            let _ = self.advance()?;
         }
 
-        op
+        Ok(op)
+    }
+
+    fn advance(&mut self) -> Result<(), InterpreterError> {
+        self.offset_ip(1, false)
     }
 
     fn binary_op(&mut self, op: BinaryOp) -> Result<Value, InterpreterError> {
-        if self.stack.len() < 2 {
+        if self.stack_len() < 2 {
             return Err(InterpreterError::InsufficientStackLengthForOperation(
                 op,
-                self.stack.len(),
+                self.stack_len(),
             ));
         }
 
-        let b = self.stack.pop().unwrap();
-        let a = self.stack.pop().unwrap();
+        let b = self.stack_pop().unwrap();
+        let a = self.stack_pop().unwrap();
 
         let value = match op {
             BinaryOp::Add => (a + b)?,
@@ -313,6 +341,119 @@ impl Interpreter {
         };
 
         Ok(value)
+    }
+
+    fn jump(&mut self, offset: usize) -> Result<(), InterpreterError> {
+        self.offset_ip(offset, false)
+    }
+
+    fn jump_loop(&mut self, offset: usize) -> Result<(), InterpreterError> {
+        self.offset_ip(offset, true)
+    }
+
+    // this is stupid I'm sorry. offset should probably not be a `usize`
+    fn offset_ip(&mut self, offset: usize, negative: bool) -> Result<(), InterpreterError> {
+        self.frames
+            .last_mut()
+            .map(|frame| {
+                if negative {
+                    frame.ip -= offset
+                } else {
+                    frame.ip += offset
+                }
+            })
+            .ok_or(InterpreterError::InsufficientCallFrameLength)
+    }
+
+    fn stack_pop(&mut self) -> Option<Value> {
+        self.frames.last_mut().and_then(|frame| frame.slots.pop())
+    }
+
+    fn stack_top(&self) -> Option<&Value> {
+        self.frames.last().and_then(|frame| frame.slots.last())
+    }
+
+    fn stack_get(&self, index: usize) -> Option<&Value> {
+        self.frames.last().and_then(|frame| frame.slots.get(index))
+    }
+
+    fn stack_set(&mut self, index: usize, value: Value) -> Result<(), InterpreterError> {
+        self.frames
+            .last_mut()
+            .map(|frame| frame.slots[index] = value)
+            .ok_or(InterpreterError::EmptyStack)
+    }
+
+    fn stack_push(&mut self, value: Value) {
+        let frame = self.frames.last_mut();
+
+        if let Some(frame) = frame {
+            frame.slots.push(value);
+        }
+    }
+
+    fn stack_len(&self) -> usize {
+        self.frames.last().map(|f| f.slots.len()).unwrap_or(0)
+    }
+
+    fn float_at(&self, index: usize) -> Option<f64> {
+        self.frames.last().and_then(|f| f.chunk.float_at(index))
+    }
+
+    fn int_at(&self, index: usize) -> Option<i64> {
+        self.frames.last().and_then(|f| f.chunk.int_at(index))
+    }
+
+    fn string_at(&self, index: usize) -> Option<String> {
+        self.frames.last().and_then(|f| f.chunk.string_at(index))
+    }
+
+    fn fn_at(&self, index: usize) -> Option<Function> {
+        self.frames.last().and_then(|f| f.chunk.fn_at(index))
+    }
+
+    fn get_ip(&self) -> Result<usize, InterpreterError> {
+        self.frames
+            .last()
+            .map(|frame| frame.ip)
+            .ok_or(InterpreterError::InsufficientCallFrameLength)
+    }
+
+    fn call_fn(&mut self, arg_count: usize) -> Result<(), InterpreterError> {
+        let callee = self.stack_get(self.stack_len() - arg_count - 1);
+
+        match callee {
+            Some(Value::Object(Object::Function(f))) => {
+                let mut call_frame = CallFrame::new(f.chunk());
+
+                if self.stack_len() < arg_count {
+                    // TODO insufficient argument length
+                    return Err(InterpreterError::InsufficientCallFrameLength);
+                }
+
+                call_frame.slots = self
+                    .frames
+                    .last_mut()
+                    .map(|f| {
+                        let mut vals = Vec::new();
+
+                        for _ in 0..arg_count {
+                            vals.push(f.slots.pop().unwrap())
+                        }
+
+                        f.slots.pop(); // pop callee
+
+                        vals
+                    })
+                    .unwrap_or(Vec::new());
+
+                self.frames.push(call_frame);
+
+                Ok(())
+            }
+            Some(v) => return Err(InterpreterError::ValueNotCallable(v.to_string())),
+            None => return Err(InterpreterError::EmptyStack),
+        }
     }
 }
 
@@ -335,13 +476,13 @@ mod test {
         code.add_op(Op::Add);
 
         let mut vm = Interpreter::new();
-        vm.chunk = code;
+        vm.frames.push(CallFrame::new(code));
 
         let _ = vm.step();
         let _ = vm.step();
         let _ = vm.step();
 
-        assert_eq!(vm.stack.first().unwrap(), &Value::from(4.6));
+        assert_eq!(vm.stack_top().unwrap(), &Value::from(4.6));
     }
 
     #[test]
@@ -355,12 +496,12 @@ mod test {
         code.add_op(Op::Add);
 
         let mut vm = Interpreter::new();
-        vm.chunk = code;
+        vm.frames.push(CallFrame::new(code));
 
         let _ = vm.run();
 
         assert_eq!(
-            vm.stack.first().unwrap(),
+            vm.stack_top().unwrap(),
             &Value::from(String::from("foobarbaz"))
         )
     }

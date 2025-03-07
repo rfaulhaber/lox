@@ -1,4 +1,4 @@
-use lox_bytecode::{Chunk, Op};
+use lox_bytecode::{Chunk, Function, Op};
 use lox_source::{
     ast::{
         decl::Decl,
@@ -285,7 +285,17 @@ impl Visitor for Compiler {
     }
 
     fn visit_call_expr(&mut self, callee: Expr, arguments: Vec<Expr>) -> Self::Value {
-        todo!()
+        let _ = self.visit_expr(callee)?;
+
+        let arg_count = arguments.len();
+
+        for expr in arguments {
+            let _ = self.visit_expr(expr)?;
+        }
+
+        self.chunk.add_op(Op::Call(arg_count));
+
+        Ok(())
     }
 
     fn visit_program(&mut self, program: Program) -> Self::Value {
@@ -420,7 +430,28 @@ impl Visitor for Compiler {
         parameters: Vec<Identifier>,
         body: Stmt,
     ) -> Self::Value {
-        todo!()
+        let arity = parameters.len();
+
+        parameters.iter().for_each(|var| {
+            self.locals.push(Local {
+                name: var.name.clone(),
+                depth: self.scope_depth + 1,
+                initialized: false,
+            })
+        });
+
+        let mut fn_chunk = Chunk::new();
+
+        std::mem::swap(&mut self.chunk, &mut fn_chunk);
+
+        let _ = self.visit_stmt(body)?;
+
+        std::mem::swap(&mut self.chunk, &mut fn_chunk);
+
+        self.chunk
+            .push_fn(Function::new_named(name.name, fn_chunk, arity));
+
+        Ok(())
     }
 
     fn visit_return_stmt(&mut self, expr: Option<Expr>) -> Self::Value {

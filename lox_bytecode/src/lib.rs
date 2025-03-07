@@ -1,10 +1,15 @@
 use lox_source::source::Span;
 
+mod function;
+
+pub use function::Function;
+
 #[derive(Debug, Clone)]
 pub enum Op {
     Integer(usize),
     Float(usize),
     String(usize),
+    Fn(usize),
     Return,
     Negate,
     Add,
@@ -28,6 +33,7 @@ pub enum Op {
     JumpIfFalse(usize),
     Jump(usize),
     Loop(usize),
+    Call(usize),
 }
 
 #[derive(Debug, Clone)]
@@ -36,6 +42,7 @@ pub struct Chunk {
     floats: Vec<f64>,
     ints: Vec<i64>,
     strings: Vec<String>,
+    fns: Vec<Function>,
     locations: Vec<(usize, Span)>,
 }
 
@@ -52,6 +59,7 @@ impl Chunk {
             floats: Vec::new(),
             ints: Vec::new(),
             strings: Vec::new(),
+            fns: Vec::new(),
             locations: Vec::new(),
         }
     }
@@ -87,6 +95,13 @@ impl Chunk {
         idx
     }
 
+    pub fn add_fn(&mut self, f: Function) -> usize {
+        let idx = self.fns.len();
+        self.fns.push(f);
+
+        idx
+    }
+
     pub fn push_float(&mut self, number: f64) {
         let idx = self.add_float(number);
         self.add_op(Op::Float(idx));
@@ -100,6 +115,11 @@ impl Chunk {
     pub fn push_string(&mut self, string: String) {
         let idx = self.add_string(string);
         self.add_op(Op::String(idx));
+    }
+
+    pub fn push_fn(&mut self, f: Function) {
+        let idx = self.add_fn(f);
+        self.add_op(Op::Fn(idx));
     }
 
     pub fn code_at(&self, index: usize) -> Option<&Op> {
@@ -116,6 +136,10 @@ impl Chunk {
 
     pub fn string_at(&self, index: usize) -> Option<String> {
         self.strings.get(index).cloned()
+    }
+
+    pub fn fn_at(&self, index: usize) -> Option<Function> {
+        self.fns.get(index).cloned()
     }
 
     pub fn code_len(&self) -> usize {
@@ -152,6 +176,14 @@ impl Chunk {
                         index,
                         self.string_at(*index).unwrap(),
                     ),
+                    Op::Fn(index) => format!(
+                        "OP_FN (index={}) {}",
+                        index,
+                        self.fn_at(*index)
+                            .unwrap()
+                            .name()
+                            .map_or("anonymous", |v| v)
+                    ),
                     Op::DefineGlobal(index) => format!(
                         "OP_DEFINE_GLOBAL (index={}) {}",
                         index,
@@ -187,6 +219,7 @@ impl Chunk {
                     Op::JumpIfFalse(pos) => format!("OP_JUMP_IF_FALSE (pos={})", pos),
                     Op::Jump(pos) => format!("OP_JUMP (pos={})", pos),
                     Op::Loop(pos) => format!("OP_LOOP (pos=-{})", pos),
+                    Op::Call(count) => format!("OP_CALL (count={})", count)
                 };
 
                 if let Some((_, source)) = source {
