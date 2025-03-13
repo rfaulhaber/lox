@@ -97,19 +97,24 @@ impl CallFrame {
 }
 
 #[derive(Debug)]
-pub struct Interpreter {
+pub struct Interpreter<W: Write> {
     globals: HashMap<String, Value>,
     frames: Vec<CallFrame>,
     mode: InterpreterMode,
+    writer: Option<W>,
 }
 
-impl Interpreter {
+impl<W: Write> Interpreter<W> {
     pub fn new() -> Self {
-        Interpreter::new_vm(InterpreterMode::Normal)
+        Interpreter::new_vm(InterpreterMode::Normal, None)
     }
 
     pub fn new_debug() -> Self {
-        Interpreter::new_vm(InterpreterMode::Debug)
+        Interpreter::new_vm(InterpreterMode::Debug, None)
+    }
+
+    pub fn new_with_writer(writer: W) -> Self {
+        Interpreter::new_vm(InterpreterMode::Normal, Some(writer))
     }
 
     pub fn set_mode(&mut self, mode: InterpreterMode) {
@@ -122,10 +127,11 @@ impl Interpreter {
         self.run()
     }
 
-    fn new_vm(mode: InterpreterMode) -> Self {
+    fn new_vm(mode: InterpreterMode, writer: Option<W>) -> Self {
         Interpreter {
             globals: HashMap::new(),
             frames: Vec::with_capacity(FRAME_MAX),
+            writer,
             mode,
         }
     }
@@ -457,7 +463,7 @@ impl Interpreter {
     }
 }
 
-impl Default for Interpreter {
+impl<W: Write> Default for Interpreter<W> {
     fn default() -> Self {
         Self::new()
     }
@@ -475,7 +481,7 @@ mod test {
 
         code.add_op(Op::Add);
 
-        let mut vm = Interpreter::new();
+        let mut vm: Interpreter<std::io::Empty> = Interpreter::new();
         vm.frames.push(CallFrame::new(code));
 
         let _ = vm.step();
@@ -495,7 +501,7 @@ mod test {
         code.add_op(Op::Add);
         code.add_op(Op::Add);
 
-        let mut vm = Interpreter::new();
+        let mut vm: Interpreter<std::io::Empty> = Interpreter::new();
         vm.frames.push(CallFrame::new(code));
 
         let _ = vm.run();
