@@ -2,19 +2,27 @@
   description = "lox";
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixpkgs-unstable";
-    flake-utils.url = "github:numtide/flake-utils";
+    flake-parts.url = "github:hercules-ci/flake-parts";
   };
 
-  outputs = {
+  outputs = inputs @ {
     self,
-    nixpkgs,
-    flake-utils,
-  }:
-    flake-utils.lib.eachDefaultSystem (system: let
-      # NOTE: this is temporary due to the fact that the canonical tests depend on the last stable version of dart
-      dartOverlay = final: prev: {
-        dart2 =
-          final.dart.override {
+    flake-parts,
+    ...
+  }: let
+    projectName = "lox";
+  in
+    # https://flake.parts/module-arguments.html
+    flake-parts.lib.mkFlake {inherit inputs;} (top @ {
+      config,
+      withSystem,
+      moduleWithSystem,
+      ...
+    }: {
+      imports = [];
+      flake = {
+        overlays.dartOverlay = final: prev: {
+          dart2 = final.dart.override {
             version = "2.19.6";
             sources = {
               "2.19.6-x86_64-linux" = builtins.fetchurl {
@@ -27,50 +35,64 @@
               };
             };
           };
+        };
       };
-      pkgs = import nixpkgs {
-        inherit system;
-        overlays = [dartOverlay];
-        config.allowUnfree = true;
-      };
-      projectName = "lox";
-    in rec {
-      packages.${projectName} = pkgs.rustPlatform.buildRustPackage {
-        pname = projectName;
-        version = "0.1.0";
-        src = ./.;
-        cargoLock.lockFile = ./Cargo.lock;
-      };
+      systems = [
+        "x86_64-linux"
+        "aarch64-darwin"
+      ];
+      perSystem = {
+        config,
+        system,
+        pkgs,
+        self',
+        ...
+      }: {
+        _module.args.pkgs = import inputs.nixpkgs {
+          inherit system;
+          overlays = [self.overlays.dartOverlay];
+        };
 
-      packages.default = self.packages.${system}.${projectName};
+        packages.${projectName} = pkgs.rustPlatform.buildRustPackage {
+          pname = projectName;
+          version = "0.1.0";
+          src = ./.;
+          cargoLock.lockFile = ./Cargo.lock;
+        };
 
-      apps.${projectName} =
-        flake-utils.lib.mkApp {drv = packages.${projectName};};
+        packages.default = config.packages.${projectName};
 
-      apps.default = self.apps.${system}.${projectName};
+        apps.${projectName} = {
+          type = "app";
+          program = "${config.packages.${projectName}}/bin/rlox";
+        };
 
-      devShells.default = pkgs.mkShell {
-        buildInputs = with pkgs; [
-          cargo
-          rustc
-          rustfmt
-          clippy
-          rust-analyzer
-          rustup
+        apps.default = config.apps.${projectName};
 
-          lldb
+        devShells.default = pkgs.mkShell {
+          buildInputs = with pkgs; [
+            cargo
+            rustc
+            rustfmt
+            clippy
+            rust-analyzer
+            rustup
 
-          # for canonical tests
-          zulu
-          clang
-          dart2
-        ];
+            lldb
 
-        nativeBuildInputs = with pkgs; [
-          # needed for cargo
-          # solves the "missing -liconv" issue
-          libiconv
-        ];
+            # for canonical tests
+            zulu
+            clang
+
+            dart2
+          ];
+
+          nativeBuildInputs = with pkgs; [
+            # needed for cargo
+            # solves the "missing -liconv" issue
+            libiconv
+          ];
+        };
       };
     });
 }
