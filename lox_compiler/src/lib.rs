@@ -32,11 +32,25 @@ pub struct Local {
     initialized: bool,
 }
 
+#[derive(Debug)]
+pub struct Context {
+    locals: Vec<Local>,
+    scope_depth: usize,
+}
+
+impl Context {
+    pub fn new() -> Self {
+        Self {
+            locals: Vec::with_capacity(LOCALS_COUNT.into()),
+            scope_depth: 0,
+        }
+    }
+}
+
 pub struct Compiler {
     ast: Program,
     chunk: Chunk,
-    locals: Vec<Local>,
-    scope_depth: usize,
+    context: Vec<Context>,
 }
 
 enum JumpType {
@@ -50,8 +64,11 @@ impl<'c> Compiler {
         Self {
             ast: source,
             chunk: Chunk::new(),
-            locals: Vec::with_capacity(LOCALS_COUNT.into()),
-            scope_depth: 0,
+            context: {
+                let mut context = Vec::with_capacity(256);
+                context.push(Context::new());
+                context
+            },
         }
     }
 
