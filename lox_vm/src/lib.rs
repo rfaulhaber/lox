@@ -1,4 +1,4 @@
-use std::{collections::HashMap, io::Write};
+use std::{collections::HashMap, io::Write, ops::IndexMut};
 
 use lox_bytecode::{self, Function};
 use lox_value::{Object, Value, ValueOperatorError};
@@ -35,6 +35,8 @@ pub enum InterpreterError {
     InsufficientCallFrameLength,
     #[error("{0} is not callable")]
     ValueNotCallable(String),
+    #[error("Undefined function {0}")]
+    UndefinedFunction(String),
 }
 
 #[derive(Debug)]
@@ -163,10 +165,30 @@ impl<W: Write> Interpreter<W> {
                 self.stack_push(Value::from(constant));
             }
             Some(Op::Fn(index)) => {
-                let constant = self.fn_at(index).unwrap();
-                self.stack_push(Value::from(constant));
+                let func = match self.fn_at(index) {
+                    Some(value) => value,
+                    None => return Err(InterpreterError::NoValueAtIndex(index)),
+                };
+
+                let _ = self
+                    .globals
+                    .insert(func.name().unwrap().to_string(), func.into());
             }
-            Some(Op::Return) | None => return Ok(InterpreterState::Finished),
+            Some(Op::Return) => {
+                let result = self.stack_pop();
+
+                if result.is_none() {
+                    return Err(InterpreterError::EmptyStack);
+                }
+
+                let _ = self.frames.pop();
+
+                if self.frames.is_empty() {
+                    return Ok(InterpreterState::Finished);
+                }
+
+                self.stack_push(result.unwrap());
+            }
             Some(Op::Negate) => match self.stack_pop() {
                 Some(Value::Number(n)) => self.stack_push(Value::Number(-n)),
                 Some(v) => return Err(InterpreterError::NegateError(v)),
@@ -212,8 +234,9 @@ impl<W: Write> Interpreter<W> {
 
                 match value {
                     Some(v) => {
-                        let mut stdout = std::io::stdout().lock();
-                        writeln!(&mut stdout, "{}", v)?;
+                        if let Some(writer) = &mut self.writer {
+                            writeln!(writer, "{}", v)?;
+                        }
                     }
                     None => return Err(InterpreterError::EmptyStack),
                 }
@@ -299,6 +322,13 @@ impl<W: Write> Interpreter<W> {
             Some(Op::Loop(pos)) => self.jump_loop(pos)?,
             Some(Op::Call(arg_count)) => {
                 self.call_fn(arg_count)?;
+            }
+            None => {
+                if self.frames.len() <= 1 {
+                    return Ok(InterpreterState::Finished);
+                }
+
+                let _ = self.frames.pop();
             }
         }
 

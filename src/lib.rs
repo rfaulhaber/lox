@@ -66,7 +66,7 @@ pub struct ReplOptions {
 pub fn repl(options: ReplOptions) -> RlResult<()> {
     let mut rl = DefaultEditor::new()?;
 
-    let mut vm = lox_vm::Interpreter::new();
+    let mut vm = lox_vm::Interpreter::new_with_writer(std::io::stdout());
 
     let mut err_spec = ColorSpec::new();
     err_spec.set_fg(Some(Color::Red));
@@ -147,7 +147,7 @@ pub fn eval_file(vm: VmOptions, print_bytecode: bool, file: PathBuf) -> Result<(
                 writeln!(&mut stdout, "{}", bytecode.disassemble().join("\n"))?;
             }
 
-            let mut vm = lox_vm::Interpreter::new();
+            let mut vm = lox_vm::Interpreter::new_with_writer(std::io::stdout());
 
             let _ = vm.eval(bytecode)?;
 

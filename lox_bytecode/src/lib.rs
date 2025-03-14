@@ -155,7 +155,8 @@ impl Chunk {
     }
 
     pub fn disassemble(&self) -> Vec<String> {
-        self.code
+        let mut main_body: Vec<String> = self
+            .code
             .iter()
             .enumerate()
             .map(|(idx, op)| {
@@ -219,7 +220,7 @@ impl Chunk {
                     Op::JumpIfFalse(pos) => format!("OP_JUMP_IF_FALSE (pos={})", pos),
                     Op::Jump(pos) => format!("OP_JUMP (pos={})", pos),
                     Op::Loop(pos) => format!("OP_LOOP (pos=-{})", pos),
-                    Op::Call(count) => format!("OP_CALL (count={})", count)
+                    Op::Call(count) => format!("OP_CALL (count={})", count),
                 };
 
                 if let Some((_, source)) = source {
@@ -231,6 +232,18 @@ impl Chunk {
                     return format!("{:04}    {:<20}", idx, formatted_op,);
                 }
             })
-            .collect()
+            .collect();
+
+        for (i, f) in self.fns.iter().enumerate() {
+            main_body.push(format!(
+                "FN_DEF (index={}) ({})",
+                i,
+                f.name().map_or("anonymous", |v| v)
+            ));
+
+            main_body.append(&mut f.chunk().disassemble());
+        }
+
+        main_body
     }
 }

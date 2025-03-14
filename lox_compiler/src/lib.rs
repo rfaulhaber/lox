@@ -206,9 +206,9 @@ impl Visitor for Compiler {
             BinaryOperator::Eq => &[Op::Equal],
             BinaryOperator::Neq => &[Op::Equal, Op::Not],
             BinaryOperator::Lt => &[Op::Less],
-            BinaryOperator::Lte => &[Op::Less, Op::Not],
+            BinaryOperator::Lte => &[Op::Greater, Op::Not],
             BinaryOperator::Gt => &[Op::Greater],
-            BinaryOperator::Gte => &[Op::Greater, Op::Not],
+            BinaryOperator::Gte => &[Op::Less, Op::Not],
             BinaryOperator::Add => &[Op::Add],
             BinaryOperator::Sub => &[Op::Subtract],
             BinaryOperator::Mul => &[Op::Multiply],
@@ -372,7 +372,7 @@ impl Visitor for Compiler {
 
                 Ok(())
             }
-            Stmt::Return(_) => todo!(),
+            Stmt::Return(expr) => self.visit_return_stmt(expr),
             Stmt::If(cond, stmt, else_stmt) => {
                 self.visit_if_stmt(cond, *stmt, else_stmt.map(|v| *v))
             }
@@ -455,7 +455,15 @@ impl Visitor for Compiler {
     }
 
     fn visit_return_stmt(&mut self, expr: Option<Expr>) -> Self::Value {
-        todo!()
+        if let Some(expr) = expr {
+            let _ = self.visit_expr(expr)?;
+        } else {
+            self.chunk.add_op(Op::Nil);
+        }
+
+        self.chunk.add_op(Op::Return);
+
+        Ok(())
     }
 }
 
