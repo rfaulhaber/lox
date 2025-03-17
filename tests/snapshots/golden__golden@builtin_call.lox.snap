@@ -4,4 +4,6 @@ assertion_line: 33
 expression: run_test(path)
 input_file: tests/fixtures/builtin_call.lox
 ---
-"true\n"
+'''
+true
+'''

@@ -4,4 +4,6 @@ assertion_line: 33
 expression: run_test(path)
 input_file: tests/fixtures/basic_statements.lox
 ---
-"-5617.41\n"
+'''
+-5617.41
+'''

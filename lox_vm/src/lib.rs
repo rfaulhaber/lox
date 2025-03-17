@@ -295,8 +295,8 @@ impl<W: Write> Interpreter<W> {
                     return Err(InterpreterError::UndefinedVariable(name));
                 }
 
-                let value = match self.stack_pop() {
-                    Some(value) => value,
+                let value = match self.stack_top() {
+                    Some(value) => value.clone(),
                     None => return Err(InterpreterError::EmptyStack),
                 };
 

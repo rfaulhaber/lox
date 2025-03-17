@@ -2,9 +2,9 @@
 source: tests/golden.rs
 assertion_line: 33
 expression: run_test(path)
-input_file: tests/fixtures/basic_logic.lox
+input_file: tests/fixtures/reassignment.lox
 ---
 '''
-"hi"
-"yes"
+"rust"
+"lox"
 '''

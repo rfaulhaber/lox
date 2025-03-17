@@ -126,7 +126,12 @@ impl<'c> Compiler {
 
         self.context
             .last_mut()
-            .map(|ctx| ctx.scope_depth -= 1)
+            .map(|ctx|
+{
+    ctx.scope_depth -= 1;
+    ctx.locals.retain(|local| local.depth <= ctx.scope_depth);
+}
+            )
             .ok_or(CompilerError::NoContextFound)
     }
 
@@ -172,7 +177,7 @@ impl<'c> Compiler {
         self.context.last().map(|ctx| {
             ctx.locals
                 .iter()
-                .find(|local| local.name == *name)
+                .find(|local| local.name == *name && local.depth == ctx.scope_depth)
         })?
     }
 

@@ -4,4 +4,6 @@ assertion_line: 33
 expression: run_test(path)
 input_file: tests/fixtures/basic_function_call.lox
 ---
-"\"Hi, Dear Reader!\"\n"
+'''
+"Hi, Dear Reader!"
+'''

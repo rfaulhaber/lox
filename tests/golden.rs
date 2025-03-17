@@ -1,4 +1,4 @@
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 use lox_compiler::Compiler;
 use lox_vm::Interpreter;
@@ -30,6 +30,6 @@ fn golden() {
     // functionally exactly what I'd want for golden tests, so I just reuse it
     glob!("fixtures/*.lox", |path| {
         println!("running test for {:?}", path);
-        insta::assert_yaml_snapshot!(run_test(path));
+        insta::assert_toml_snapshot!(run_test(path));
     });
 }
