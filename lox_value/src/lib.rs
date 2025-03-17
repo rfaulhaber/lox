@@ -1,8 +1,10 @@
+use crate::native::NativeFunction;
 use lox_bytecode::Function;
 pub use number::Number;
-pub use object::{Object};
+pub use object::Object;
 use thiserror::Error;
 
+pub mod native;
 mod number;
 mod object;
 
@@ -52,6 +54,12 @@ impl From<Function> for Value {
     }
 }
 
+impl From<NativeFunction> for Value {
+    fn from(value: NativeFunction) -> Self {
+        Value::Object(Object::Native(value))
+    }
+}
+
 impl std::fmt::Display for Value {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(
@@ -66,6 +74,9 @@ impl std::fmt::Display for Value {
                     Some(name) => format!("function {}/{}", name, f.arity()),
                     None => format!("function anonymous/{}", f.arity()),
                 },
+                Value::Object(Object::Native(f)) => {
+                    format!("<native {}/{}>", f.name(), f.arity())
+                }
             }
         )
     }

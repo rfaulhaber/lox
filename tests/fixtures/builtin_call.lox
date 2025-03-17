@@ -1,1 +1,2 @@
-print clock();
+// 1742244388888 is when I wrote this test :)
+print clock() > 1742244388888;

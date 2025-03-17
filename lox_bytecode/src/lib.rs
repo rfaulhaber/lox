@@ -236,7 +236,7 @@ impl Chunk {
 
         for (i, f) in self.fns.iter().enumerate() {
             main_body.push(format!(
-                "FN_DEF (index={}) ({})",
+                "FN_DEF (index={}): ({})",
                 i,
                 f.name().map_or("anonymous", |v| v)
             ));

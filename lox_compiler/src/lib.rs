@@ -19,6 +19,8 @@ pub enum CompilerError {
     LocalVariableLimit,
     #[error("Duplicate variable {0} in scope")]
     DuplicateVariableInScope(String),
+    #[error("Insufficient context depth")]
+    NoContextFound,
 }
 
 pub type CompilerResult = Result<Chunk, CompilerError>;
@@ -99,53 +101,117 @@ impl<'c> Compiler {
         self.chunk.add_op(Op::String(idx))
     }
 
-    fn begin_scope(&mut self) {
-        self.scope_depth += 1;
+    fn begin_scope(&mut self) -> Result<(), CompilerError> {
+        self.context
+            .last_mut()
+            .map(|ctx| ctx.scope_depth += 1)
+            .ok_or(CompilerError::NoContextFound)
     }
 
-    fn end_scope(&mut self) {
-        self.locals
-            .iter()
-            .filter(|l| l.depth == self.scope_depth)
-            .for_each(|_| self.chunk.add_op(Op::Pop));
+    fn end_scope(&mut self) -> Result<(), CompilerError> {
+        let count = self
+            .context
+            .last_mut()
+            .map(|ctx| {
+                ctx.locals
+                    .iter()
+                    .filter(|l| l.depth == ctx.scope_depth)
+                    .count()
+            })
+            .ok_or(CompilerError::NoContextFound)?;
 
-        self.scope_depth -= 1;
+        for _ in 0..count {
+            self.chunk.add_op(Op::Pop);
+        }
+
+        self.context
+            .last_mut()
+            .map(|ctx| ctx.scope_depth -= 1)
+            .ok_or(CompilerError::NoContextFound)
     }
 
-    fn add_local(&mut self, name: String) -> usize {
-        let idx = self.locals.len();
-        self.locals.insert(
-            idx,
-            Local {
-                name,
-                depth: self.scope_depth,
-                initialized: false,
-            },
-        );
+    fn begin_context(&mut self) {
+        self.context.push(Context::new());
+    }
 
-        idx
+    fn end_context(&mut self) {
+        let _ = self.context.pop();
+    }
+
+    fn scope_depth(&mut self) -> usize {
+        self.context
+            .last()
+            .map(|ctx| ctx.scope_depth)
+            .unwrap_or_default() // maybe I should not do this lol
+    }
+
+    fn locals_count(&mut self) -> usize {
+        self.ref_context(|ctx| ctx.locals.len()).unwrap_or_default()
+    }
+
+    fn add_local(&mut self, name: String) -> Result<usize, CompilerError> {
+        self.context
+            .last_mut()
+            .map(|ctx| {
+                let idx = ctx.locals.len();
+                ctx.locals.push(Local {
+                    name,
+                    depth: ctx.scope_depth,
+                    initialized: false,
+                });
+                idx
+            })
+            .ok_or(CompilerError::NoContextFound)
     }
 
     fn find_local(&mut self, name: &String) -> Option<&Local> {
-        if self.scope_depth == 0 {
+        if self.scope_depth() == 0 {
             return None;
         }
 
-        self.locals
-            .iter()
-            .find(|local| local.name == *name && local.depth == self.scope_depth)
+        self.context.last().map(|ctx| {
+            ctx.locals
+                .iter()
+                .find(|local| local.name == *name)
+        })?
     }
 
     fn lookup_local(&mut self, name: &String) -> Option<(usize, &Local)> {
-        if self.scope_depth == 0 {
+        if self.scope_depth() == 0 {
             return None;
         }
 
-        self.locals
-            .iter()
-            .enumerate()
-            .rev()
-            .find(|(_, local)| local.name == *name)
+        self.context.last().map(|ctx| {
+            ctx.locals
+                .iter()
+                .enumerate()
+                .rev()
+                .find(|(_, local)| local.name == *name)
+        })?
+    }
+
+    fn initialize_local(&mut self, idx: usize) -> Result<(), CompilerError> {
+        self.use_context(|ctx| ctx.locals[idx].initialized = true)
+    }
+
+    fn ref_context<F, R>(&mut self, func: F) -> Result<R, CompilerError>
+    where
+        F: FnOnce(&Context) -> R,
+    {
+        self.context
+            .last()
+            .map(func)
+            .ok_or(CompilerError::NoContextFound)
+    }
+
+    fn use_context<F, R>(&mut self, func: F) -> Result<R, CompilerError>
+    where
+        F: FnOnce(&mut Context) -> R,
+    {
+        self.context
+            .last_mut()
+            .map(func)
+            .ok_or(CompilerError::NoContextFound)
     }
 
     fn jump_around<F>(&mut self, jump_type: JumpType, func: F) -> Result<(), CompilerError>
@@ -267,7 +333,7 @@ impl Visitor for Compiler {
 
         let existing_local = self.lookup_local(&name);
         if let Some((idx, _)) = existing_local {
-            self.locals[idx].initialized = true;
+            self.initialize_local(idx)?;
             self.chunk.add_op(Op::SetLocal(idx));
         } else {
             let idx = self.chunk.add_string(name);
@@ -341,11 +407,11 @@ impl Visitor for Compiler {
 
                 let name = id.name;
 
-                if self.scope_depth == 0 {
+                if self.scope_depth() == 0 {
                     let idx = self.chunk.add_string(name);
                     self.chunk.add_op(Op::DefineGlobal(idx));
                 } else {
-                    if self.locals.len() == LOCALS_COUNT.into() {
+                    if self.locals_count() == LOCALS_COUNT.into() {
                         return Err(CompilerError::LocalVariableLimit);
                     }
 
@@ -355,7 +421,7 @@ impl Visitor for Compiler {
                         return Err(CompilerError::DuplicateVariableInScope(name));
                     }
 
-                    let idx = self.add_local(name);
+                    let idx = self.add_local(name)?;
                     self.chunk.add_op(Op::SetLocal(idx));
                 }
 
@@ -398,13 +464,13 @@ impl Visitor for Compiler {
     }
 
     fn visit_block(&mut self, block: Vec<Decl>) -> Self::Value {
-        self.begin_scope();
+        self.begin_scope()?;
 
         for decl in block {
             self.visit_declaration(decl)?;
         }
 
-        self.end_scope();
+        self.end_scope()?;
 
         Ok(())
     }
@@ -449,13 +515,28 @@ impl Visitor for Compiler {
     ) -> Self::Value {
         let arity = parameters.len();
 
-        parameters.iter().for_each(|var| {
-            self.locals.push(Local {
-                name: var.name.clone(),
-                depth: self.scope_depth + 1,
-                initialized: false,
+        self.begin_context();
+
+        let errors = parameters
+            .iter()
+            .map(|var| {
+                self.context
+                    .last_mut()
+                    .map(|ctx| {
+                        ctx.locals.push(Local {
+                            name: var.name.clone(),
+                            depth: ctx.scope_depth + 1,
+                            initialized: false,
+                        })
+                    })
+                    .ok_or(CompilerError::NoContextFound)
             })
-        });
+            .filter(|r| r.is_err())
+            .collect::<Vec<Result<(), CompilerError>>>();
+
+        if !errors.is_empty() {
+            return errors.first().cloned().unwrap();
+        }
 
         let mut fn_chunk = Chunk::new();
 
@@ -464,6 +545,8 @@ impl Visitor for Compiler {
         let _ = self.visit_stmt(body)?;
 
         std::mem::swap(&mut self.chunk, &mut fn_chunk);
+
+        self.end_context();
 
         self.chunk
             .push_fn(Function::new_named(name.name, fn_chunk, arity));

@@ -1,5 +1,0 @@
----
-source: tests/golden.rs
-expression: "run_test(\"assignments\")"
----
-"\"lox\"\n"

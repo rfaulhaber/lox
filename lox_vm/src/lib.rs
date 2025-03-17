@@ -1,10 +1,16 @@
-use std::{collections::HashMap, io::Write, ops::IndexMut};
+use std::{collections::HashMap, io::Write};
 
 use lox_bytecode::{self, Function};
-use lox_value::{Object, Value, ValueOperatorError};
+use lox_value::{
+    native::{NativeFunction, NativeFunctionError},
+    Object, Value, ValueOperatorError,
+};
 
 use lox_bytecode::{Chunk, Op};
+use native::native_functions;
 use thiserror::Error;
+
+mod native;
 
 pub const FRAME_MAX: usize = 64;
 pub const STACK_SIZE: usize = FRAME_MAX * u8::MAX as usize;
@@ -37,6 +43,8 @@ pub enum InterpreterError {
     ValueNotCallable(String),
     #[error("Undefined function {0}")]
     UndefinedFunction(String),
+    #[error("Native function encountered error")]
+    NativeFunctionError(#[from] NativeFunctionError),
 }
 
 #[derive(Debug)]
@@ -130,8 +138,14 @@ impl<W: Write> Interpreter<W> {
     }
 
     fn new_vm(mode: InterpreterMode, writer: Option<W>) -> Self {
+        let mut globals = HashMap::new();
+
+        for f in native_functions() {
+            globals.insert(f.name().into(), f.into());
+        }
+
         Interpreter {
-            globals: HashMap::new(),
+            globals,
             frames: Vec::with_capacity(FRAME_MAX),
             writer,
             mode,
@@ -456,7 +470,7 @@ impl<W: Write> Interpreter<W> {
     }
 
     fn call_fn(&mut self, arg_count: usize) -> Result<(), InterpreterError> {
-        let callee = self.stack_get(self.stack_len() - arg_count - 1);
+        let callee = self.stack_get(self.stack_len() - arg_count - 1).cloned();
 
         match callee {
             Some(Value::Object(Object::Function(f))) => {
@@ -479,11 +493,23 @@ impl<W: Write> Interpreter<W> {
 
                         f.slots.pop(); // pop callee
 
-                        vals
+                        vals.into_iter().rev().collect()
                     })
                     .unwrap_or(Vec::new());
 
                 self.frames.push(call_frame);
+
+                Ok(())
+            }
+            Some(Value::Object(Object::Native(f))) => {
+                let mut arguments = Vec::new();
+
+                for _ in 0..f.arity() {
+                    arguments.push(self.stack_pop().ok_or(InterpreterError::EmptyStack)?);
+                }
+
+                let value = f.func()(&arguments)?;
+                self.stack_push(value);
 
                 Ok(())
             }
