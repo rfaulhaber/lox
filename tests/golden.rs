@@ -12,7 +12,7 @@ fn run_test(file_path: &Path) -> String {
 
     let mut actual_out = Vec::<u8>::new();
 
-    let bytecode = Compiler::new_from_source(&*in_contents)
+    let bytecode = Compiler::new_from_source(&in_contents)
         .expect("Could not create compiler")
         .compile()
         .expect("Could not compile code");

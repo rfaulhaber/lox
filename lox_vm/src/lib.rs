@@ -1,6 +1,6 @@
 use std::{collections::HashMap, io::Write};
 
-use lox_bytecode::{self, Function};
+use lox_bytecode::Function;
 use lox_value::{
     native::{NativeFunction, NativeFunctionError},
     Object, Value, ValueOperatorError,

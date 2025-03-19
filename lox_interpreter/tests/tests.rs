@@ -27,7 +27,7 @@ macro_rules! make_tree_walk_test_inner {
         assert_eq!(*output, expected);
     };
 
-    ($name:ident, $override:expr) => {
+    ($name:ident, $override:expr_2021) => {
         let test_case = TestCase::new(stringify!($name)).unwrap();
 
         let TestCase {
@@ -67,14 +67,14 @@ macro_rules! make_tree_walk_test {
         }
     };
 
-    ($name:ident, $override:expr) => {
+    ($name:ident, $override:expr_2021) => {
         #[test]
         fn $name() {
             make_tree_walk_test_inner!($name, $override);
         }
     };
 
-    ($name:ident, $override:expr, ignore) => {
+    ($name:ident, $override:expr_2021, ignore) => {
         #[test]
         #[ignore]
         fn $name() {

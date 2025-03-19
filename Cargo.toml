@@ -1,7 +1,7 @@
 [package]
 name = "lox"
 version = "0.1.0"
-edition = "2021"
+edition = "2024"
 
 [[bin]]
 name = "rlox"
@@ -18,7 +18,7 @@ lox_source = { path = "./lox_source" }
 termcolor = "1.4.1"
 
 [workspace]
-members = [".", "lox_source", "lox_interpreter", "lox_vm" , "lox_bytecode", "lox_compiler", "lox_value"]
+members = [".", "lox_source", "lox_vm" , "lox_bytecode", "lox_compiler", "lox_value"]
 
 [dev-dependencies]
 insta = { version = "1.42.2", features = ["yaml", "toml", "glob"] }
