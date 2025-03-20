@@ -1,0 +1,4 @@
+var x = true;
+var bool = x and false;
+
+print bool;

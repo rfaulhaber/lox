@@ -9,4 +9,4 @@ lox_vm = { path = "../lox_vm" }
 thiserror = "1"
 
 [dev-dependencies]
-insta = { version = "1.42.1", features = ["yaml"] }
+insta = { version = "1.42.1", features = ["toml", "glob"] }

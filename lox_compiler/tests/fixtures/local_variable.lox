@@ -1,0 +1,8 @@
+var test = "global";
+{
+    var test = "inner";
+    {
+        var test = "inner2";
+        var innermost = "innermost";
+    }
+}

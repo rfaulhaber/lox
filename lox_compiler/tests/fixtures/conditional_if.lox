@@ -1,0 +1,4 @@
+var x = false;
+if (x) {
+    print "x";
+}

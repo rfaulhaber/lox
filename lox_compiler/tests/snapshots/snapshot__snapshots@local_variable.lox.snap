@@ -1,0 +1,17 @@
+---
+source: lox_compiler/tests/snapshot.rs
+expression: run_test(path)
+input_file: lox_compiler/tests/fixtures/local_variable.lox
+---
+'''
+0000    OP_STRING (index=0) global
+0001    OP_DEFINE_GLOBAL (index=1) test
+0002    OP_STRING (index=2) inner
+0003    OP_SET_LOCAL (index=0)
+0004    OP_STRING (index=3) inner2
+0005    OP_SET_LOCAL (index=1)
+0006    OP_STRING (index=4) innermost
+0007    OP_SET_LOCAL (index=2)
+0008    OP_POP              
+0009    OP_POP              
+0010    OP_POP              '''

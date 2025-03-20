@@ -1,0 +1,8 @@
+var x = 3;
+{
+    var i = 0;
+    while (i < x) {
+        print i;
+        i = i + 1;
+    }
+}

@@ -1,0 +1,6 @@
+var x = false;
+if (x) {
+    print "fizz";
+} else {
+    print "buzz";
+}
