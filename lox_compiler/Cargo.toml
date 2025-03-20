@@ -5,7 +5,7 @@ edition = "2024"
 
 [dependencies]
 lox_source = { path = "../lox_source" }
-lox_bytecode = { path = "../lox_bytecode" }
+lox_vm = { path = "../lox_vm" }
 thiserror = "1"
 
 [dev-dependencies]

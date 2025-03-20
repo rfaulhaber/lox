@@ -1,16 +1,14 @@
 use std::{collections::HashMap, io::Write};
 
-use lox_bytecode::Function;
-use lox_value::{
-    native::{NativeFunction, NativeFunctionError},
-    Object, Value, ValueOperatorError,
-};
+use crate::bytecode::{Chunk,  Op};
+use crate::value::{Object, Value, Function, ValueOperatorError, native::NativeFunctionError};
 
-use lox_bytecode::{Chunk, Op};
 use native::native_functions;
 use thiserror::Error;
 
+pub mod bytecode;
 mod native;
+pub mod value;
 
 pub const FRAME_MAX: usize = 64;
 pub const STACK_SIZE: usize = FRAME_MAX * u8::MAX as usize;

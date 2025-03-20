@@ -390,19 +390,12 @@ dependencies = [
 ]
 
 [[package]]
-name = "lox_bytecode"
-version = "0.1.0"
-dependencies = [
- "lox_source",
-]
-
-[[package]]
 name = "lox_compiler"
 version = "0.1.0"
 dependencies = [
  "insta",
- "lox_bytecode",
  "lox_source",
+ "lox_vm",
  "thiserror",
 ]
 
@@ -417,21 +410,11 @@ dependencies = [
 ]
 
 [[package]]
-name = "lox_value"
-version = "0.1.0"
-dependencies = [
- "lox_bytecode",
- "thiserror",
-]
-
-[[package]]
 name = "lox_vm"
 version = "0.1.0"
 dependencies = [
  "jiff",
- "lox_bytecode",
  "lox_source",
- "lox_value",
  "thiserror",
 ]
 

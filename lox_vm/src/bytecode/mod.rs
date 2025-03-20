@@ -1,8 +1,5 @@
+use crate::value::Function;
 use lox_source::source::Span;
-
-mod function;
-
-pub use function::Function;
 
 #[derive(Debug, Clone)]
 pub enum Op {

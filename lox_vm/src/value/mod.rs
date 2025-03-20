@@ -1,9 +1,12 @@
-use crate::native::NativeFunction;
-use lox_bytecode::Function;
+pub use function::Function;
+use native::NativeFunction;
 pub use number::Number;
 pub use object::Object;
 use thiserror::Error;
+pub use closure::Closure;
 
+mod closure;
+mod function;
 pub mod native;
 mod number;
 mod object;
@@ -76,6 +79,13 @@ impl std::fmt::Display for Value {
                 },
                 Value::Object(Object::Native(f)) => {
                     format!("<native {}/{}>", f.name(), f.arity())
+                }
+                Value::Object(Object::Closure(cl)) => {
+                    format!(
+                        "<closure {}/{}>",
+                        cl.name().map_or("anonymous", |v| v),
+                        cl.arity()
+                    )
                 }
             }
         )

@@ -1,4 +1,4 @@
-use super::Chunk;
+use crate::bytecode::Chunk;
 
 #[derive(Debug, Clone)]
 pub struct Function {

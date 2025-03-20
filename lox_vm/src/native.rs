@@ -1,6 +1,6 @@
-use lox_value::native::NativeFunction;
-use lox_value::native::NativeFunctionResult;
-use lox_value::Value;
+use crate::value::native::NativeFunction;
+use crate::value::native::NativeFunctionResult;
+use crate::value::Value;
 
 pub fn native_functions() -> Vec<NativeFunction> {
     vec![NativeFunction::new("clock", 0, clock)]

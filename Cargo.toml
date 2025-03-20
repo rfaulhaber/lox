@@ -18,7 +18,7 @@ lox_source = { path = "./lox_source" }
 termcolor = "1.4.1"
 
 [workspace]
-members = [".", "lox_source", "lox_vm" , "lox_bytecode", "lox_compiler", "lox_value"]
+members = [".", "lox_source", "lox_vm" , "lox_compiler"]
 
 [dev-dependencies]
 insta = { version = "1.42.2", features = ["yaml", "toml", "glob"] }

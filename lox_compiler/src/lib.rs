@@ -1,4 +1,3 @@
-use lox_bytecode::{Chunk, Function, Op};
 use lox_source::{
     ast::{
         decl::Decl,
@@ -9,6 +8,8 @@ use lox_source::{
     },
     parser::{ParseError, Parser},
 };
+use lox_vm::bytecode::{Chunk, Op};
+use lox_vm::value::Function;
 use thiserror::Error;
 
 #[derive(Debug, Clone, Error)]
@@ -126,12 +127,10 @@ impl<'c> Compiler {
 
         self.context
             .last_mut()
-            .map(|ctx|
-{
-    ctx.scope_depth -= 1;
-    ctx.locals.retain(|local| local.depth <= ctx.scope_depth);
-}
-            )
+            .map(|ctx| {
+                ctx.scope_depth -= 1;
+                ctx.locals.retain(|local| local.depth <= ctx.scope_depth);
+            })
             .ok_or(CompilerError::NoContextFound)
     }
 
@@ -574,7 +573,7 @@ impl Visitor for Compiler {
 
 #[cfg(test)]
 mod test {
-    use lox_bytecode::Op;
+    use lox_vm::bytecode::Op;
 
     use super::*;
 
