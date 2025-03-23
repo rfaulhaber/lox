@@ -1,7 +1,9 @@
+// TODO refactor vm into separate file, tidy up lib.rs
+
 use std::{collections::HashMap, io::Write};
 
-use crate::bytecode::{Chunk,  Op};
-use crate::value::{Object, Value, Function, ValueOperatorError, native::NativeFunctionError};
+use crate::bytecode::{Chunk, Op};
+use crate::value::{Function, Object, Value, ValueOperatorError, native::NativeFunctionError};
 
 use native::native_functions;
 use thiserror::Error;
@@ -334,6 +336,9 @@ impl<W: Write> Interpreter<W> {
             Some(Op::Loop(pos)) => self.jump_loop(pos)?,
             Some(Op::Call(arg_count)) => {
                 self.call_fn(arg_count)?;
+            }
+            Some(Op::Closure(index)) => {
+                todo!()
             }
             None => {
                 if self.frames.len() <= 1 {

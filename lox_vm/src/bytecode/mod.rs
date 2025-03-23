@@ -31,6 +31,7 @@ pub enum Op {
     Jump(usize),
     Loop(usize),
     Call(usize),
+    Closure(usize),
 }
 
 #[derive(Debug, Clone)]
@@ -116,7 +117,7 @@ impl Chunk {
 
     pub fn push_fn(&mut self, f: Function) {
         let idx = self.add_fn(f);
-        self.add_op(Op::Fn(idx));
+        self.add_op(Op::Closure(idx));
     }
 
     pub fn code_at(&self, index: usize) -> Option<&Op> {
@@ -218,6 +219,7 @@ impl Chunk {
                     Op::Jump(pos) => format!("OP_JUMP (pos={})", pos),
                     Op::Loop(pos) => format!("OP_LOOP (pos=-{})", pos),
                     Op::Call(count) => format!("OP_CALL (count={})", count),
+                    Op::Closure(index) => format!("OP_CLOSURE (index={})", index),
                 };
 
                 if let Some((_, source)) = source {
