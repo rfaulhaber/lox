@@ -17,4 +17,18 @@ impl Closure {
     pub fn arity(&self) -> usize {
         self.func.arity()
     }
+
+    pub(crate) fn func(&self) -> &Function {
+        &self.func
+    }
+
+    pub fn is_anonymous(&self) -> bool {
+        self.func.name().is_none()
+    }
+}
+
+impl From<Function> for Closure {
+    fn from(value: Function) -> Self {
+        Closure::new(value)
+    }
 }

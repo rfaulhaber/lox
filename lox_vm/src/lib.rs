@@ -7,6 +7,7 @@ use crate::value::{Function, Object, Value, ValueOperatorError, native::NativeFu
 
 use native::native_functions;
 use thiserror::Error;
+use value::Closure;
 
 pub mod bytecode;
 mod native;
@@ -90,7 +91,6 @@ impl std::fmt::Display for BinaryOp {
 
 #[derive(Debug)]
 pub struct CallFrame {
-    // function: Function,
     slots: Vec<Value>,
     ip: usize,
     chunk: Chunk,
@@ -338,6 +338,24 @@ impl<W: Write> Interpreter<W> {
                 self.call_fn(arg_count)?;
             }
             Some(Op::Closure(index)) => {
+                let func = match self.fn_at(index) {
+                    Some(value) => value,
+                    None => return Err(InterpreterError::NoValueAtIndex(index)),
+                };
+
+                if func.name().is_none() {
+                    let closure = Value::from(Closure::new(func));
+                    self.stack_push(closure);
+                } else {
+                    let _ = self
+                        .globals
+                        .insert(func.name().unwrap().to_string(), func.into());
+                }
+            }
+            Some(Op::GetUpvalue(index)) => {
+                todo!()
+            }
+            Some(Op::SetUpvalue(index)) => {
                 todo!()
             }
             None => {
@@ -476,33 +494,11 @@ impl<W: Write> Interpreter<W> {
         let callee = self.stack_get(self.stack_len() - arg_count - 1).cloned();
 
         match callee {
-            Some(Value::Object(Object::Function(f))) => {
-                let mut call_frame = CallFrame::new(f.chunk());
-
-                if self.stack_len() < arg_count {
-                    // TODO insufficient argument length
-                    return Err(InterpreterError::InsufficientCallFrameLength);
-                }
-
-                call_frame.slots = self
-                    .frames
-                    .last_mut()
-                    .map(|f| {
-                        let mut vals = Vec::new();
-
-                        for _ in 0..arg_count {
-                            vals.push(f.slots.pop().unwrap())
-                        }
-
-                        f.slots.pop(); // pop callee
-
-                        vals.into_iter().rev().collect()
-                    })
-                    .unwrap_or(Vec::new());
-
-                self.frames.push(call_frame);
-
-                Ok(())
+            Some(Value::Object(Object::Closure(closure))) => {
+                self.eval_callable(closure.func().chunk(), arg_count)
+            }
+            Some(Value::Object(Object::Function(func))) => {
+                self.eval_callable(func.chunk(), arg_count)
             }
             Some(Value::Object(Object::Native(f))) => {
                 let mut arguments = Vec::new();
@@ -519,6 +515,35 @@ impl<W: Write> Interpreter<W> {
             Some(v) => return Err(InterpreterError::ValueNotCallable(v.to_string())),
             None => return Err(InterpreterError::EmptyStack),
         }
+    }
+
+    fn eval_callable(&mut self, chunk: Chunk, arg_count: usize) -> Result<(), InterpreterError> {
+        let mut call_frame = CallFrame::new(chunk);
+
+        if self.stack_len() < arg_count {
+            // TODO insufficient argument length
+            return Err(InterpreterError::InsufficientCallFrameLength);
+        }
+
+        call_frame.slots = self
+            .frames
+            .last_mut()
+            .map(|f| {
+                let mut vals = Vec::new();
+
+                for _ in 0..arg_count {
+                    vals.push(f.slots.pop().unwrap())
+                }
+
+                f.slots.pop(); // pop callee
+
+                vals.into_iter().rev().collect()
+            })
+            .unwrap_or(Vec::new());
+
+        self.frames.push(call_frame);
+
+        Ok(())
     }
 }
 

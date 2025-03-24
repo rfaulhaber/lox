@@ -48,6 +48,28 @@ impl Context {
             scope_depth: 0,
         }
     }
+
+    pub fn find_local(&self, name: &String) -> Option<&Local> {
+        if self.scope_depth == 0 {
+            return None;
+        }
+
+        self.locals
+            .iter()
+            .find(|local| local.name == *name && local.depth == self.scope_depth)
+    }
+
+    pub fn lookup_local(&self, name: &String) -> Option<(usize, &Local)> {
+        if self.scope_depth == 0 {
+            return None;
+        }
+
+        self.locals
+            .iter()
+            .enumerate()
+            .rev()
+            .find(|(_, local)| local.name == *name)
+    }
 }
 
 pub struct Compiler {
@@ -154,18 +176,15 @@ impl<'c> Compiler {
     }
 
     fn add_local(&mut self, name: String) -> Result<usize, CompilerError> {
-        self.context
-            .last_mut()
-            .map(|ctx| {
-                let idx = ctx.locals.len();
-                ctx.locals.push(Local {
-                    name,
-                    depth: ctx.scope_depth,
-                    initialized: false,
-                });
-                idx
-            })
-            .ok_or(CompilerError::NoContextFound)
+        self.mut_context(|ctx| {
+            let idx = ctx.locals.len();
+            ctx.locals.push(Local {
+                name,
+                depth: ctx.scope_depth,
+                initialized: false,
+            });
+            idx
+        })
     }
 
     fn find_local(&mut self, name: &String) -> Option<&Local> {
@@ -173,11 +192,7 @@ impl<'c> Compiler {
             return None;
         }
 
-        self.context.last().map(|ctx| {
-            ctx.locals
-                .iter()
-                .find(|local| local.name == *name && local.depth == ctx.scope_depth)
-        })?
+        self.context.last().map(|ctx| ctx.find_local(name))?
     }
 
     fn lookup_local(&mut self, name: &String) -> Option<(usize, &Local)> {
@@ -185,17 +200,11 @@ impl<'c> Compiler {
             return None;
         }
 
-        self.context.last().map(|ctx| {
-            ctx.locals
-                .iter()
-                .enumerate()
-                .rev()
-                .find(|(_, local)| local.name == *name)
-        })?
+        self.context.last().map(|ctx| ctx.lookup_local(name))?
     }
 
     fn initialize_local(&mut self, idx: usize) -> Result<(), CompilerError> {
-        self.use_context(|ctx| ctx.locals[idx].initialized = true)
+        self.mut_context(|ctx| ctx.locals[idx].initialized = true)
     }
 
     fn ref_context<F, R>(&mut self, func: F) -> Result<R, CompilerError>
@@ -208,7 +217,7 @@ impl<'c> Compiler {
             .ok_or(CompilerError::NoContextFound)
     }
 
-    fn use_context<F, R>(&mut self, func: F) -> Result<R, CompilerError>
+    fn mut_context<F, R>(&mut self, func: F) -> Result<R, CompilerError>
     where
         F: FnOnce(&mut Context) -> R,
     {
@@ -255,11 +264,10 @@ impl Visitor for Compiler {
             Expr::Get(_, _) => todo!(),
             Expr::Set(_, _, _) => todo!(),
             Expr::Var(id) => {
+                // TODO refactor into method
                 let name = id.name;
 
-                let existing_local = self.lookup_local(&name);
-
-                if let Some((idx, _)) = existing_local {
+                if let Some((idx, _)) = self.lookup_local(&name) {
                     self.chunk.add_op(Op::GetLocal(idx));
                 } else {
                     let idx = self.chunk.add_string(name);
@@ -339,9 +347,6 @@ impl Visitor for Compiler {
         if let Some((idx, _)) = existing_local {
             self.initialize_local(idx)?;
             self.chunk.add_op(Op::SetLocal(idx));
-        } else {
-            let idx = self.chunk.add_string(name);
-            self.chunk.add_op(Op::SetGlobal(idx));
         }
 
         Ok(())

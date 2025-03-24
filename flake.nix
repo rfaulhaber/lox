@@ -3,6 +3,10 @@
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixpkgs-unstable";
     flake-parts.url = "github:hercules-ci/flake-parts";
+    rust-overlay = {
+      url = "github:oxalica/rust-overlay";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
   };
 
   outputs = inputs @ {
@@ -21,22 +25,26 @@
     }: {
       imports = [];
       flake = {
-        overlays.dartOverlay = final: prev: {
-          dart2 = final.dart.override {
-            version = "2.19.6";
-            sources = {
-              "2.19.6-x86_64-linux" = builtins.fetchurl {
-                url = "https://storage.googleapis.com/dart-archive/channels/stable/release/2.19.6/sdk/dartsdk-linux-x64-release.zip";
-                sha256 = "sha256:0kvhvwd2q8s7mnjgvhl6gr3y73agcd0y79sm844xd8ybd9gg5pqg";
-              };
-              "2.19.6-aarch64-darwin" = builtins.fetchurl {
-                url = "https://storage.googleapis.com/dart-archive/channels/stable/release/2.19.6/sdk/dartsdk-macos-arm64-release.zip";
-                sha256 = "sha256:1dpd8czllsxqly7hrcazp8g9b5zj6ibs93l5qyykijjbyjv58srw";
+        overlays = {
+          dartOverlay = final: prev: {
+            dart2 = final.dart.override {
+              version = "2.19.6";
+              sources = {
+                "2.19.6-x86_64-linux" = builtins.fetchurl {
+                  url = "https://storage.googleapis.com/dart-archive/channels/stable/release/2.19.6/sdk/dartsdk-linux-x64-release.zip";
+                  sha256 = "sha256:0kvhvwd2q8s7mnjgvhl6gr3y73agcd0y79sm844xd8ybd9gg5pqg";
+                };
+                "2.19.6-aarch64-darwin" = builtins.fetchurl {
+                  url = "https://storage.googleapis.com/dart-archive/channels/stable/release/2.19.6/sdk/dartsdk-macos-arm64-release.zip";
+                  sha256 = "sha256:1dpd8czllsxqly7hrcazp8g9b5zj6ibs93l5qyykijjbyjv58srw";
+                };
               };
             };
           };
+          rustOverlay = inputs.rust-overlay.overlays.default;
         };
       };
+
       systems = [
         "x86_64-linux"
         "aarch64-darwin"
@@ -48,9 +56,14 @@
         self',
         ...
       }: {
+        formatter = pkgs.alejandra;
+
         _module.args.pkgs = import inputs.nixpkgs {
           inherit system;
-          overlays = [self.overlays.dartOverlay];
+          overlays = [
+            self.overlays.dartOverlay
+            self.overlays.rustOverlay
+          ];
         };
 
         packages.${projectName} = pkgs.rustPlatform.buildRustPackage {
@@ -71,12 +84,9 @@
 
         devShells.default = pkgs.mkShell {
           buildInputs = with pkgs; [
-            cargo
-            rustc
-            rustfmt
+            rust-bin.stable.latest.default
             clippy
             rust-analyzer
-            rustup
 
             lldb
 
@@ -85,6 +95,8 @@
             clang
 
             dart2
+
+            nil
           ];
 
           nativeBuildInputs = with pkgs; [

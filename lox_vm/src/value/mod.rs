@@ -1,9 +1,9 @@
+pub use closure::Closure;
 pub use function::Function;
 use native::NativeFunction;
 pub use number::Number;
 pub use object::Object;
 use thiserror::Error;
-pub use closure::Closure;
 
 mod closure;
 mod function;
@@ -60,6 +60,12 @@ impl From<Function> for Value {
 impl From<NativeFunction> for Value {
     fn from(value: NativeFunction) -> Self {
         Value::Object(Object::Native(value))
+    }
+}
+
+impl From<Closure> for Value {
+    fn from(value: Closure) -> Self {
+        Value::Object(Object::Closure(value))
     }
 }
 
