@@ -6,3 +6,5 @@ tmp/
 target
 result
 .direnv
+
+.projectile-cache.eld
