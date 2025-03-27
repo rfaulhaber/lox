@@ -19,6 +19,12 @@ pub enum ValueOperatorError {
     IncompatibleUnaryOperation(String, String),
 }
 
+#[derive(Debug, Clone, PartialEq, Error)]
+pub enum ValueConvertError {
+    #[error("Wrong type ({0})")]
+    IncorrectType(String),
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub enum Value {
     Number(Number),
@@ -171,6 +177,61 @@ impl std::ops::Neg for Value {
                 "negation".into(),
                 val.to_string(),
             )),
+        }
+    }
+}
+
+impl TryInto<bool> for Value {
+    type Error = ValueConvertError;
+
+    fn try_into(self) -> Result<bool, Self::Error> {
+        match self {
+            Value::Bool(b) => Ok(b),
+            _ => Err(ValueConvertError::IncorrectType(format!("{:?}", self))),
+        }
+    }
+}
+
+impl TryInto<Number> for Value {
+    type Error = ValueConvertError;
+
+    fn try_into(self) -> Result<Number, Self::Error> {
+        match self {
+            Value::Number(n) => Ok(n),
+            _ => Err(ValueConvertError::IncorrectType(format!("{:?}", self))),
+        }
+    }
+}
+
+impl TryInto<Function> for Value {
+    type Error = ValueConvertError;
+
+    fn try_into(self) -> Result<Function, Self::Error> {
+        match self {
+            Value::Object(Object::Function(f)) => Ok(f),
+            _ => Err(ValueConvertError::IncorrectType(format!("{:?}", self))),
+        }
+    }
+}
+
+impl TryInto<Closure> for Value {
+    type Error = ValueConvertError;
+
+    fn try_into(self) -> Result<Closure, Self::Error> {
+        match self {
+            Value::Object(Object::Closure(c)) => Ok(c),
+            _ => Err(ValueConvertError::IncorrectType(format!("{:?}", self))),
+        }
+    }
+}
+
+impl TryInto<String> for Value {
+    type Error = ValueConvertError;
+
+    fn try_into(self) -> Result<String, Self::Error> {
+        match self {
+            Value::Object(Object::String(s)) => Ok(s),
+            _ => Err(ValueConvertError::IncorrectType(format!("{:?}", self))),
         }
     }
 }

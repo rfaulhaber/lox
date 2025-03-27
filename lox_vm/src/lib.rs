@@ -167,19 +167,19 @@ impl<W: Write> Interpreter<W> {
 
         match op {
             Some(Op::Float(index)) => {
-                let constant = self.float_at(index).unwrap();
-                self.stack_push(Value::from(constant));
+                let constant = self.const_at(index).cloned().unwrap();
+                self.stack_push(constant);
             }
             Some(Op::Integer(index)) => {
-                let constant = self.int_at(index).unwrap();
-                self.stack_push(Value::from(constant));
+                let constant = self.const_at(index).cloned().unwrap();
+                self.stack_push(constant);
             }
             Some(Op::String(index)) => {
-                let constant = self.string_at(index).unwrap();
-                self.stack_push(Value::from(constant));
+                let constant = self.const_at(index).cloned().unwrap();
+                self.stack_push(constant);
             }
             Some(Op::Fn(index)) => {
-                let func = match self.fn_at(index) {
+                let func = match self.const_at(index) {
                     Some(value) => value,
                     None => return Err(InterpreterError::NoValueAtIndex(index)),
                 };
@@ -260,7 +260,7 @@ impl<W: Write> Interpreter<W> {
             }
             Some(Op::DefineGlobal(index)) => {
                 let value = self.stack_pop();
-                let name = match self.string_at(index) {
+                let name = match self.const_at(index) {
                     Some(value) => value,
                     None => return Err(InterpreterError::NoValueAtIndex(index)),
                 };
@@ -273,7 +273,7 @@ impl<W: Write> Interpreter<W> {
                 }
             }
             Some(Op::GetGlobal(index)) => {
-                let name = match self.string_at(index) {
+                let name = match self.const_at(index) {
                     Some(value) => value,
                     None => return Err(InterpreterError::NoValueAtIndex(index)),
                 };
@@ -286,7 +286,7 @@ impl<W: Write> Interpreter<W> {
                 self.stack_push(value.clone());
             }
             Some(Op::SetGlobal(index)) => {
-                let name = match self.string_at(index) {
+                let name = match self.const_at(index) {
                     Some(value) => value,
                     None => return Err(InterpreterError::NoValueAtIndex(index)),
                 };
@@ -338,18 +338,20 @@ impl<W: Write> Interpreter<W> {
                 self.call_fn(arg_count)?;
             }
             Some(Op::Closure(index)) => {
-                let func = match self.fn_at(index) {
+                let func = match self.const_at(index) {
                     Some(value) => value,
                     None => return Err(InterpreterError::NoValueAtIndex(index)),
                 };
 
-                if func.name().is_none() {
-                    let closure = Value::from(Closure::new(func));
+                let func_value: Function = func.into()?;
+
+                if func_value.name().is_none() {
+                    let closure = Value::from(Closure::new(func_value));
                     self.stack_push(closure);
                 } else {
                     let _ = self
                         .globals
-                        .insert(func.name().unwrap().to_string(), func.into());
+                        .insert(func_value.name().unwrap().to_string(), func_value.into());
                 }
             }
             Some(Op::GetUpvalue(index)) => {
@@ -467,20 +469,8 @@ impl<W: Write> Interpreter<W> {
         self.frames.last().map(|f| f.slots.len()).unwrap_or(0)
     }
 
-    fn float_at(&self, index: usize) -> Option<f64> {
-        self.frames.last().and_then(|f| f.chunk.float_at(index))
-    }
-
-    fn int_at(&self, index: usize) -> Option<i64> {
-        self.frames.last().and_then(|f| f.chunk.int_at(index))
-    }
-
-    fn string_at(&self, index: usize) -> Option<String> {
-        self.frames.last().and_then(|f| f.chunk.string_at(index))
-    }
-
-    fn fn_at(&self, index: usize) -> Option<Function> {
-        self.frames.last().and_then(|f| f.chunk.fn_at(index))
+    fn const_at(&self, index: usize) -> Option<&Value> {
+        self.frames.last().and_then(|f| f.chunk.const_at(index))
     }
 
     fn get_ip(&self) -> Result<usize, InterpreterError> {

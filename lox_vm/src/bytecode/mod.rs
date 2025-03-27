@@ -1,4 +1,4 @@
-use crate::value::Function;
+use crate::value::{Function, Object, Value};
 use lox_source::source::Span;
 
 #[derive(Debug, Clone)]
@@ -39,11 +39,8 @@ pub enum Op {
 #[derive(Debug, Clone)]
 pub struct Chunk {
     code: Vec<Op>,
-    floats: Vec<f64>,
-    ints: Vec<i64>,
-    strings: Vec<String>,
-    fns: Vec<Function>,
-    locations: Vec<(usize, Span)>,
+    consts: Vec<Value>,
+    locations: Vec<Span>,
 }
 
 impl Default for Chunk {
@@ -55,19 +52,15 @@ impl Default for Chunk {
 impl Chunk {
     pub fn new() -> Self {
         Chunk {
+            consts: Vec::new(),
             code: Vec::new(),
-            floats: Vec::new(),
-            ints: Vec::new(),
-            strings: Vec::new(),
-            fns: Vec::new(),
             locations: Vec::new(),
         }
     }
 
     pub fn add_sourced_op(&mut self, code: Op, location: Span) {
-        let idx = self.code.len();
         self.code.push(code);
-        self.locations.push((idx, location));
+        self.locations.push(location);
     }
 
     pub fn add_op(&mut self, code: Op) {
@@ -75,29 +68,30 @@ impl Chunk {
     }
 
     pub fn add_float(&mut self, number: f64) -> usize {
-        let idx = self.floats.len();
-        self.floats.push(number);
+        let idx = self.consts.len();
+        self.consts.push(Value::from(number));
 
         idx
     }
 
     pub fn add_int(&mut self, number: i64) -> usize {
-        let idx = self.ints.len();
-        self.ints.push(number);
+        let idx = self.consts.len();
+        self.consts.push(Value::from(number));
 
         idx
     }
 
     pub fn add_string(&mut self, string: String) -> usize {
-        let idx = self.strings.len();
-        self.strings.push(string.trim_matches('"').to_string());
+        let idx = self.consts.len();
+        self.consts
+            .push(Value::from(string.trim_matches('"').to_string()));
 
         idx
     }
 
     pub fn add_fn(&mut self, f: Function) -> usize {
-        let idx = self.fns.len();
-        self.fns.push(f);
+        let idx = self.consts.len();
+        self.consts.push(Value::from(f));
 
         idx
     }
@@ -126,20 +120,8 @@ impl Chunk {
         self.code.get(index)
     }
 
-    pub fn float_at(&self, index: usize) -> Option<f64> {
-        self.floats.get(index).copied()
-    }
-
-    pub fn int_at(&self, index: usize) -> Option<i64> {
-        self.ints.get(index).copied()
-    }
-
-    pub fn string_at(&self, index: usize) -> Option<String> {
-        self.strings.get(index).cloned()
-    }
-
-    pub fn fn_at(&self, index: usize) -> Option<Function> {
-        self.fns.get(index).cloned()
+    pub fn const_at(&self, index: usize) -> Option<&Value> {
+        self.consts.get(index)
     }
 
     pub fn code_len(&self) -> usize {
@@ -160,45 +142,44 @@ impl Chunk {
             .iter()
             .enumerate()
             .map(|(idx, op)| {
-                let source = self.locations.iter().find(|(location, _)| *location == idx);
+                let source = self
+                    .locations
+                    .iter()
+                    .enumerate()
+                    .find(|(location, _)| *location == idx);
                 let formatted_op = match op {
                     Op::Integer(index) => format!(
                         "OP_INTEGER (index={}) {}",
                         index,
-                        self.int_at(*index).unwrap(),
+                        self.const_at(*index).unwrap(),
                     ),
                     Op::Float(index) => format!(
                         "OP_FLOAT (index={}) {}",
                         index,
-                        self.float_at(*index).unwrap(),
+                        self.const_at(*index).unwrap(),
                     ),
                     Op::String(index) => format!(
                         "OP_STRING (index={}) {}",
                         index,
-                        self.string_at(*index).unwrap(),
+                        self.const_at(*index).unwrap(),
                     ),
-                    Op::Fn(index) => format!(
-                        "OP_FN (index={}) {}",
-                        index,
-                        self.fn_at(*index)
-                            .unwrap()
-                            .name()
-                            .map_or("anonymous", |v| v)
-                    ),
+                    Op::Fn(index) => {
+                        format!("OP_FN (index={}) {}", index, self.const_at(*index).unwrap())
+                    }
                     Op::DefineGlobal(index) => format!(
                         "OP_DEFINE_GLOBAL (index={}) {}",
                         index,
-                        self.string_at(*index).unwrap(),
+                        self.const_at(*index).unwrap(),
                     ),
                     Op::GetGlobal(index) => format!(
                         "OP_GET_GLOBAL (index={}) {}",
                         index,
-                        self.string_at(*index).unwrap(),
+                        self.const_at(*index).unwrap(),
                     ),
                     Op::SetGlobal(index) => format!(
                         "OP_SET_GLOBAL (index={}) {}",
                         index,
-                        self.string_at(*index).unwrap(),
+                        self.const_at(*index).unwrap(),
                     ),
                     Op::GetLocal(index) => format!("OP_GET_LOCAL (index={})", index),
                     Op::SetLocal(index) => format!("OP_SET_LOCAL (index={})", index),
@@ -237,14 +218,21 @@ impl Chunk {
             })
             .collect();
 
-        for (i, f) in self.fns.iter().enumerate() {
-            main_body.push(format!(
-                "FN_DEF (index={}): ({})",
-                i,
-                f.name().map_or("anonymous", |v| v)
-            ));
+        for (i, f) in self.consts.iter().enumerate() {
+            match f {
+                Value::Object(Object::Function(func)) => {
+                    main_body.push(format!(
+                        "FN_DEF (index={}): ({})",
+                        i,
+                        func.name().map_or("anonymous", |v| v)
+                    ));
 
-            main_body.append(&mut f.chunk().disassemble());
+                    main_body.append(&mut func.chunk().disassemble());
+                }
+                _ => {
+                    continue;
+                }
+            }
         }
 
         main_body
