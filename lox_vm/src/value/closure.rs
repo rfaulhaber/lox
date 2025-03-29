@@ -2,7 +2,7 @@ use super::Function;
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Closure {
-    func: Function,
+    pub(crate) func: Function,
 }
 
 impl Closure {

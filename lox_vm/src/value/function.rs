@@ -1,10 +1,18 @@
 use crate::bytecode::Chunk;
 
+use super::Closure;
+
 #[derive(Debug, Clone)]
 pub struct Function {
     name: Option<String>,
     chunk: Chunk,
     arity: usize,
+}
+
+impl From<Closure> for Function {
+    fn from(value: Closure) -> Self {
+        value.func
+    }
 }
 
 impl Function {

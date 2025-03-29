@@ -8,8 +8,11 @@ use lox_source::{
     },
     parser::{ParseError, Parser},
 };
-use lox_vm::bytecode::{Chunk, Op};
 use lox_vm::value::Function;
+use lox_vm::{
+    bytecode::{Chunk, Op},
+    value::Closure,
+};
 use thiserror::Error;
 
 #[derive(Debug, Clone, Error)]
@@ -331,6 +334,9 @@ impl Visitor for Compiler {
         if let Some((idx, _)) = existing_local {
             self.initialize_local(idx)?;
             self.chunk.add_op(Op::SetLocal(idx));
+        } else {
+            let idx = self.chunk.add_const(name);
+            self.chunk.add_op(Op::SetGlobal(idx));
         }
 
         Ok(())
@@ -541,9 +547,10 @@ impl Visitor for Compiler {
 
         self.end_context();
 
-        let _ = self
-            .chunk
-            .push_const(Function::new_named(name.name, fn_chunk, arity));
+        let new_fn = Function::new_named(name.name, fn_chunk, arity);
+
+        let idx = self.chunk.add_const(Closure::new(new_fn));
+        self.chunk.add_op(Op::Closure(idx));
 
         Ok(())
     }

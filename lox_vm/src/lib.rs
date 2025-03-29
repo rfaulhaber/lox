@@ -350,10 +350,10 @@ impl<W: Write> Interpreter<W> {
                     None => return Err(InterpreterError::NoValueAtIndex(index)),
                 };
 
-                let func_value: Function = func.try_into()?;
+                let func_value: Closure = func.try_into()?;
 
                 if func_value.name().is_none() {
-                    let closure = Value::from(Closure::new(func_value));
+                    let closure = Value::from(func_value);
                     self.stack_push(closure);
                 } else {
                     let _ = self

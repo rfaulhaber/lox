@@ -28,7 +28,7 @@ fn run_test(file_path: &Path) -> String {
 fn golden() {
     // I know that /technically/ these aren't "golden" tests, however `insta` is
     // functionally exactly what I'd want for golden tests, so I just reuse it
-    glob!("fixtures/*.lox", |path| {
+    glob!("fixtures/[!_]*.lox", |path| {
         println!("running test for {:?}", path);
         insta::assert_toml_snapshot!(run_test(path));
     });

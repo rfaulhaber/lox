@@ -11,6 +11,7 @@ input_file: lox_compiler/tests/fixtures/global_variable.lox
 0004    OP_CONST (index=4) "beignets with "
 0005    OP_GET_GLOBAL (index=5) "beverage"
 0006    OP_ADD              
-0007    OP_POP              
-0008    OP_GET_GLOBAL (index=6) "breakfast"
-0009    OP_PRINT            '''
+0007    OP_SET_GLOBAL (index=6) "breakfast"
+0008    OP_POP              
+0009    OP_GET_GLOBAL (index=7) "breakfast"
+0010    OP_PRINT            '''
