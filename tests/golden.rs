@@ -24,10 +24,11 @@ fn run_test(file_path: &Path) -> String {
     String::from_utf8_lossy(&actual_out).into()
 }
 
+// I know that /technically/ these aren't "golden" tests, however `insta` is
+// functionally exactly what I'd want for golden tests, so I just reuse it
 #[test]
 fn golden() {
-    // I know that /technically/ these aren't "golden" tests, however `insta` is
-    // functionally exactly what I'd want for golden tests, so I just reuse it
+    // we exclude tests that begin with '_'
     glob!("fixtures/[!_]*.lox", |path| {
         println!("running test for {:?}", path);
         insta::assert_toml_snapshot!(run_test(path));

@@ -39,6 +39,11 @@ pub struct Local {
 }
 
 #[derive(Debug)]
+pub struct Upvalue {
+    name: String,
+}
+
+#[derive(Debug)]
 pub struct Context {
     locals: Vec<Local>,
     scope_depth: usize,
@@ -52,6 +57,7 @@ impl Context {
         }
     }
 
+    /// Returns a reference to a local named `name` in the current scope.
     pub fn find_local(&self, name: &String) -> Option<&Local> {
         if self.scope_depth == 0 {
             return None;
@@ -62,6 +68,8 @@ impl Context {
             .find(|local| local.name == *name && local.depth == self.scope_depth)
     }
 
+    /// Returns the index of the local and the local where `name` == local.name, if it exists.
+    /// Unlike `find_local`, this is not limited to the current scope, however it does search by the most recent locals added.
     pub fn lookup_local(&self, name: &String) -> Option<(usize, &Local)> {
         if self.scope_depth == 0 {
             return None;
@@ -195,6 +203,10 @@ impl<'c> Compiler {
         self.mut_context(|ctx| ctx.locals[idx].initialized = true)
     }
 
+    fn lookup_upvalue(&self, name: &String) -> Option<(usize, &Upvalue)> {
+        todo!()
+    }
+
     fn ref_context<F, R>(&mut self, func: F) -> Result<R, CompilerError>
     where
         F: FnOnce(&Context) -> R,
@@ -254,6 +266,8 @@ impl Visitor for Compiler {
             Expr::Var(id) => {
                 // TODO refactor into method
                 let name = id.name;
+
+                // TODO lookup upvalue
 
                 if let Some((idx, _)) = self.lookup_local(&name) {
                     self.chunk.add_op(Op::GetLocal(idx));
@@ -330,8 +344,7 @@ impl Visitor for Compiler {
 
         let name = id.name;
 
-        let existing_local = self.lookup_local(&name);
-        if let Some((idx, _)) = existing_local {
+        if let Some((idx, _)) = self.lookup_local(&name) {
             self.initialize_local(idx)?;
             self.chunk.add_op(Op::SetLocal(idx));
         } else {
