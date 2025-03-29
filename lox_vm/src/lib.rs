@@ -7,7 +7,7 @@ use crate::value::{Function, Object, Value, ValueOperatorError, native::NativeFu
 
 use native::native_functions;
 use thiserror::Error;
-use value::Closure;
+use value::{Closure, ValueConvertError};
 
 pub mod bytecode;
 mod native;
@@ -46,6 +46,10 @@ pub enum InterpreterError {
     UndefinedFunction(String),
     #[error("Native function encountered error")]
     NativeFunctionError(#[from] NativeFunctionError),
+    #[error("Wrong type at index {0}, got {1}, expected {2}")]
+    WrongTypeAtIndex(usize, String, String),
+    #[error("Value conversion error")]
+    ValueConversionError(#[from] ValueConvertError),
 }
 
 #[derive(Debug)]
@@ -166,27 +170,9 @@ impl<W: Write> Interpreter<W> {
         let op = self.next_op_and_advance()?;
 
         match op {
-            Some(Op::Float(index)) => {
+            Some(Op::Const(index)) => {
                 let constant = self.const_at(index).cloned().unwrap();
                 self.stack_push(constant);
-            }
-            Some(Op::Integer(index)) => {
-                let constant = self.const_at(index).cloned().unwrap();
-                self.stack_push(constant);
-            }
-            Some(Op::String(index)) => {
-                let constant = self.const_at(index).cloned().unwrap();
-                self.stack_push(constant);
-            }
-            Some(Op::Fn(index)) => {
-                let func = match self.const_at(index) {
-                    Some(value) => value,
-                    None => return Err(InterpreterError::NoValueAtIndex(index)),
-                };
-
-                let _ = self
-                    .globals
-                    .insert(func.name().unwrap().to_string(), func.into());
             }
             Some(Op::Return) => {
                 let result = self.stack_pop();
@@ -261,38 +247,59 @@ impl<W: Write> Interpreter<W> {
             Some(Op::DefineGlobal(index)) => {
                 let value = self.stack_pop();
                 let name = match self.const_at(index) {
-                    Some(value) => value,
+                    Some(Value::Object(Object::String(s))) => s,
+                    v => {
+                        return Err(InterpreterError::WrongTypeAtIndex(
+                            index,
+                            "string".to_string(),
+                            format!("{:?}", v),
+                        ));
+                    }
                     None => return Err(InterpreterError::NoValueAtIndex(index)),
                 };
 
                 match value {
                     Some(v) => {
-                        self.globals.insert(name, v);
+                        self.globals.insert(name.to_string(), v);
                     }
                     None => return Err(InterpreterError::EmptyStack),
                 }
             }
             Some(Op::GetGlobal(index)) => {
                 let name = match self.const_at(index) {
-                    Some(value) => value,
+                    Some(Value::Object(Object::String(s))) => s,
+                    v => {
+                        return Err(InterpreterError::WrongTypeAtIndex(
+                            index,
+                            "String".into(),
+                            format!("{:?}", v),
+                        ));
+                    }
                     None => return Err(InterpreterError::NoValueAtIndex(index)),
                 };
 
-                let value = match self.globals.get(&name) {
+                let value = match self.globals.get(name) {
                     Some(value) => value,
-                    None => return Err(InterpreterError::UndefinedVariable(name)),
+                    None => return Err(InterpreterError::UndefinedVariable(name.to_string())),
                 };
 
                 self.stack_push(value.clone());
             }
             Some(Op::SetGlobal(index)) => {
                 let name = match self.const_at(index) {
-                    Some(value) => value,
+                    Some(Value::Object(Object::String(s))) => s,
+                    v => {
+                        return Err(InterpreterError::WrongTypeAtIndex(
+                            index,
+                            "String".into(),
+                            format!("{:?}", v),
+                        ));
+                    }
                     None => return Err(InterpreterError::NoValueAtIndex(index)),
                 };
 
-                if !self.globals.contains_key(&name) {
-                    return Err(InterpreterError::UndefinedVariable(name));
+                if !self.globals.contains_key(name) {
+                    return Err(InterpreterError::UndefinedVariable(name.to_string()));
                 }
 
                 let value = match self.stack_top() {
@@ -300,7 +307,7 @@ impl<W: Write> Interpreter<W> {
                     None => return Err(InterpreterError::EmptyStack),
                 };
 
-                let _ = self.globals.insert(name, value);
+                let _ = self.globals.insert(name.to_string(), value);
             }
             Some(Op::GetLocal(index)) => {
                 let value = self.stack_get(index);
@@ -339,11 +346,11 @@ impl<W: Write> Interpreter<W> {
             }
             Some(Op::Closure(index)) => {
                 let func = match self.const_at(index) {
-                    Some(value) => value,
+                    Some(value) => value.clone(),
                     None => return Err(InterpreterError::NoValueAtIndex(index)),
                 };
 
-                let func_value: Function = func.into()?;
+                let func_value: Function = func.try_into()?;
 
                 if func_value.name().is_none() {
                     let closure = Value::from(Closure::new(func_value));
@@ -550,8 +557,8 @@ mod test {
     #[test]
     fn stack_calculation() {
         let mut code = Chunk::new();
-        code.push_float(1.2);
-        code.push_float(3.4);
+        code.push_const(1.2);
+        code.push_const(3.4);
 
         code.add_op(Op::Add);
 
@@ -568,9 +575,9 @@ mod test {
     #[test]
     fn string_concat() {
         let mut code = Chunk::new();
-        code.push_string("foo".into());
-        code.push_string("bar".into());
-        code.push_string("baz".into());
+        code.push_const("foo");
+        code.push_const("bar");
+        code.push_const("baz");
 
         code.add_op(Op::Add);
         code.add_op(Op::Add);

@@ -3,10 +3,7 @@ use lox_source::source::Span;
 
 #[derive(Debug, Clone)]
 pub enum Op {
-    Integer(usize),
-    Float(usize),
-    String(usize),
-    Fn(usize),
+    Const(usize),
     Return,
     Negate,
     Add,
@@ -67,53 +64,18 @@ impl Chunk {
         self.code.push(code);
     }
 
-    pub fn add_float(&mut self, number: f64) -> usize {
+    pub fn add_const<T: Into<Value>>(&mut self, value: T) -> usize {
         let idx = self.consts.len();
-        self.consts.push(Value::from(number));
+        self.consts.push(value.into());
 
         idx
     }
 
-    pub fn add_int(&mut self, number: i64) -> usize {
-        let idx = self.consts.len();
-        self.consts.push(Value::from(number));
+    pub fn push_const<T: Into<Value>>(&mut self, value: T) -> usize {
+        let idx = self.add_const(value);
+        self.add_op(Op::Const(idx));
 
         idx
-    }
-
-    pub fn add_string(&mut self, string: String) -> usize {
-        let idx = self.consts.len();
-        self.consts
-            .push(Value::from(string.trim_matches('"').to_string()));
-
-        idx
-    }
-
-    pub fn add_fn(&mut self, f: Function) -> usize {
-        let idx = self.consts.len();
-        self.consts.push(Value::from(f));
-
-        idx
-    }
-
-    pub fn push_float(&mut self, number: f64) {
-        let idx = self.add_float(number);
-        self.add_op(Op::Float(idx));
-    }
-
-    pub fn push_int(&mut self, number: i64) {
-        let idx = self.add_int(number);
-        self.add_op(Op::Integer(idx));
-    }
-
-    pub fn push_string(&mut self, string: String) {
-        let idx = self.add_string(string);
-        self.add_op(Op::String(idx));
-    }
-
-    pub fn push_fn(&mut self, f: Function) {
-        let idx = self.add_fn(f);
-        self.add_op(Op::Closure(idx));
     }
 
     pub fn code_at(&self, index: usize) -> Option<&Op> {
@@ -148,24 +110,10 @@ impl Chunk {
                     .enumerate()
                     .find(|(location, _)| *location == idx);
                 let formatted_op = match op {
-                    Op::Integer(index) => format!(
-                        "OP_INTEGER (index={}) {}",
+                    Op::Const(index) => format!(
+                        "OP_CONST (index={}) {}",
                         index,
-                        self.const_at(*index).unwrap(),
-                    ),
-                    Op::Float(index) => format!(
-                        "OP_FLOAT (index={}) {}",
-                        index,
-                        self.const_at(*index).unwrap(),
-                    ),
-                    Op::String(index) => format!(
-                        "OP_STRING (index={}) {}",
-                        index,
-                        self.const_at(*index).unwrap(),
-                    ),
-                    Op::Fn(index) => {
-                        format!("OP_FN (index={}) {}", index, self.const_at(*index).unwrap())
-                    }
+                        self.const_at(*index).unwrap()),
                     Op::DefineGlobal(index) => format!(
                         "OP_DEFINE_GLOBAL (index={}) {}",
                         index,

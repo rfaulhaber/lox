@@ -109,21 +109,6 @@ impl<'c> Compiler {
         Ok(self.chunk)
     }
 
-    fn write_int(&mut self, int: i64) {
-        let idx = self.chunk.add_int(int);
-        self.chunk.add_op(Op::Integer(idx));
-    }
-
-    fn write_float(&mut self, float: f64) {
-        let idx = self.chunk.add_float(float);
-        self.chunk.add_op(Op::Float(idx));
-    }
-
-    fn write_string(&mut self, string: String) {
-        let idx = self.chunk.add_string(string);
-        self.chunk.add_op(Op::String(idx))
-    }
-
     fn begin_scope(&mut self) -> Result<(), CompilerError> {
         self.context
             .last_mut()
@@ -270,7 +255,7 @@ impl Visitor for Compiler {
                 if let Some((idx, _)) = self.lookup_local(&name) {
                     self.chunk.add_op(Op::GetLocal(idx));
                 } else {
-                    let idx = self.chunk.add_string(name);
+                    let idx = self.chunk.add_const(name);
                     self.chunk.add_op(Op::GetGlobal(idx));
                 }
 
@@ -319,13 +304,12 @@ impl Visitor for Compiler {
 
     fn visit_literal(&mut self, literal: Literal) -> Self::Value {
         match literal {
-            Literal::Number(Number::Float(f)) => {
-                self.write_float(f);
+            Literal::Number(n) => {
+                let _ = self.chunk.push_const(n);
             }
-            Literal::Number(Number::Int(i)) => {
-                self.write_int(i);
+            Literal::String(s) => {
+                let _ = self.chunk.push_const(s);
             }
-            Literal::String(s) => self.write_string(s),
             Literal::Bool(true) => self.chunk.add_op(Op::True),
             Literal::Bool(false) => self.chunk.add_op(Op::False),
             Literal::Nil => self.chunk.add_op(Op::Nil),
@@ -417,7 +401,7 @@ impl Visitor for Compiler {
                 let name = id.name;
 
                 if self.scope_depth() == 0 {
-                    let idx = self.chunk.add_string(name);
+                    let idx = self.chunk.add_const(name);
                     self.chunk.add_op(Op::DefineGlobal(idx));
                 } else {
                     if self.locals_count() == LOCALS_COUNT.into() {
@@ -557,8 +541,9 @@ impl Visitor for Compiler {
 
         self.end_context();
 
-        self.chunk
-            .push_fn(Function::new_named(name.name, fn_chunk, arity));
+        let _ = self
+            .chunk
+            .push_const(Function::new_named(name.name, fn_chunk, arity));
 
         Ok(())
     }
@@ -586,8 +571,8 @@ mod test {
     fn number_literals() {
         let input = "123;";
         let mut expected = Chunk::new();
-        expected.add_int(123);
-        expected.add_op(Op::Integer(0));
+        expected.add_const(123);
+        expected.add_op(Op::Const(0));
         expected.add_op(Op::Pop);
 
         let result = Compiler::new_from_source(input).unwrap().compile().unwrap();
@@ -599,8 +584,8 @@ mod test {
     fn grouping() {
         let input = "(123);";
         let mut expected = Chunk::new();
-        expected.add_int(123);
-        expected.add_op(Op::Integer(0));
+        expected.add_const(123);
+        expected.add_op(Op::Const(0));
         expected.add_op(Op::Pop);
 
         let result = Compiler::new_from_source(input).unwrap().compile().unwrap();
@@ -612,8 +597,8 @@ mod test {
     fn unary_negation() {
         let input = "-123;";
         let mut expected = Chunk::new();
-        expected.add_int(123);
-        expected.add_op(Op::Integer(0));
+        expected.add_const(123);
+        expected.add_op(Op::Const(0));
         expected.add_op(Op::Negate);
         expected.add_op(Op::Pop);
 
@@ -627,10 +612,10 @@ mod test {
         let input = "123 + 456;";
 
         let mut expected = Chunk::new();
-        expected.add_int(123);
-        expected.add_op(Op::Integer(0));
-        expected.add_int(456);
-        expected.add_op(Op::Integer(1));
+        expected.add_const(123);
+        expected.add_op(Op::Const(0));
+        expected.add_const(456);
+        expected.add_op(Op::Const(1));
         expected.add_op(Op::Add);
         expected.add_op(Op::Pop);
 
@@ -644,10 +629,10 @@ mod test {
         let input = "123 - 456;";
 
         let mut expected = Chunk::new();
-        expected.add_int(123);
-        expected.add_op(Op::Integer(0));
-        expected.add_int(456);
-        expected.add_op(Op::Integer(1));
+        expected.add_const(123);
+        expected.add_op(Op::Const(0));
+        expected.add_const(456);
+        expected.add_op(Op::Const(1));
         expected.add_op(Op::Subtract);
         expected.add_op(Op::Pop);
 
@@ -661,10 +646,10 @@ mod test {
         let input = "123 * 456;";
 
         let mut expected = Chunk::new();
-        expected.add_int(123);
-        expected.add_op(Op::Integer(0));
-        expected.add_int(456);
-        expected.add_op(Op::Integer(1));
+        expected.add_const(123);
+        expected.add_op(Op::Const(0));
+        expected.add_const(456);
+        expected.add_op(Op::Const(1));
         expected.add_op(Op::Multiply);
         expected.add_op(Op::Pop);
 
@@ -678,10 +663,10 @@ mod test {
         let input = "123 / 456;";
 
         let mut expected = Chunk::new();
-        expected.add_int(123);
-        expected.add_op(Op::Integer(0));
-        expected.add_int(456);
-        expected.add_op(Op::Integer(1));
+        expected.add_const(123);
+        expected.add_op(Op::Const(0));
+        expected.add_const(456);
+        expected.add_op(Op::Const(1));
         expected.add_op(Op::Divide);
         expected.add_op(Op::Pop);
 

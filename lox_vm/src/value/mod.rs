@@ -53,7 +53,7 @@ impl From<bool> for Value {
 
 impl From<String> for Value {
     fn from(value: String) -> Self {
-        Value::Object(Object::String(value))
+        Value::Object(Object::String(String::from(value.trim_matches('"'))))
     }
 }
 
@@ -69,9 +69,36 @@ impl From<NativeFunction> for Value {
     }
 }
 
+impl From<Number> for Value {
+    fn from(value: Number) -> Self {
+        Value::Number(value)
+    }
+}
+
 impl From<Closure> for Value {
     fn from(value: Closure) -> Self {
         Value::Object(Object::Closure(value))
+    }
+}
+
+impl<'s> From<&'s str> for Value {
+    fn from(value: &'s str) -> Self {
+        Value::Object(Object::String(String::from(value.trim_matches('"'))))
+    }
+}
+
+impl Into<Number> for lox_source::ast::expr::Number {
+    fn into(self) -> Number {
+        match self {
+            lox_source::ast::expr::Number::Int(i) => Number::Int(i),
+            lox_source::ast::expr::Number::Float(f) => Number::Float(f),
+        }
+    }
+}
+
+impl Into<Value> for lox_source::ast::expr::Number {
+    fn into(self) -> Value {
+        Value::Number(self.into())
     }
 }
 
@@ -84,7 +111,7 @@ impl std::fmt::Display for Value {
                 Value::Number(n) => n.to_string(),
                 Value::Bool(b) => b.to_string(),
                 Value::Nil => String::from("nil"),
-                Value::Object(Object::String(s)) => format!("\"{}\"", s),
+                Value::Object(Object::String(s)) => format!("\"{}\"", s.trim_matches('"')),
                 Value::Object(Object::Function(f)) => match f.name() {
                     Some(name) => format!("function {}/{}", name, f.arity()),
                     None => format!("function anonymous/{}", f.arity()),
