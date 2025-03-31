@@ -50,6 +50,8 @@ pub enum InterpreterError {
     WrongTypeAtIndex(usize, String, String),
     #[error("Value conversion error")]
     ValueConversionError(#[from] ValueConvertError),
+    #[error("Upvalue not found at frame {0}, var {1}")]
+    UpvalueNotFound(usize, usize),
 }
 
 #[derive(Debug)]
@@ -361,10 +363,10 @@ impl<W: Write> Interpreter<W> {
                         .insert(func_value.name().unwrap().to_string(), func_value.into());
                 }
             }
-            Some(Op::GetUpvalue(index)) => {
+            Some(Op::GetUpvalue(frame_idx, var_idx)) => {
                 todo!()
             }
-            Some(Op::SetUpvalue(index)) => {
+            Some(Op::SetUpvalue(frame_idx, var_idx)) => {
                 todo!()
             }
             None => {

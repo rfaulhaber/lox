@@ -31,16 +31,11 @@ pub type CompilerResult = Result<Chunk, CompilerError>;
 
 pub const LOCALS_COUNT: u8 = u8::MAX;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Local {
     name: String,
     depth: usize,
     initialized: bool,
-}
-
-#[derive(Debug)]
-pub struct Upvalue {
-    name: String,
 }
 
 #[derive(Debug)]
@@ -49,7 +44,7 @@ pub struct Context {
     scope_depth: usize,
 }
 
-impl Context {
+impl<'c> Context {
     pub fn new() -> Self {
         Self {
             locals: Vec::with_capacity(LOCALS_COUNT.into()),
@@ -160,7 +155,7 @@ impl<'c> Compiler {
         let _ = self.context.pop();
     }
 
-    fn scope_depth(&mut self) -> usize {
+    fn scope_depth(&self) -> usize {
         self.context
             .last()
             .map(|ctx| ctx.scope_depth)
@@ -203,8 +198,26 @@ impl<'c> Compiler {
         self.mut_context(|ctx| ctx.locals[idx].initialized = true)
     }
 
-    fn lookup_upvalue(&self, name: &String) -> Option<(usize, &Upvalue)> {
-        todo!()
+    fn lookup_external_local(&self, name: &String) -> Option<(usize, usize, Local)> {
+        let scope_depth = self.scope_depth();
+
+        // TODO there's probably a more efficient way to do this lol
+        // could probably just return a tuple of indices
+        // self.context
+        //     .iter()
+        //     .enumerate()
+        //     .rev()
+        //     .skip(1)
+        //     .map(|(idx, ctx)| (idx, ctx.locals.clone()))
+        //     .find_map(|(idx, locals)| {
+        //         locals
+        //             .iter()
+        //             .enumerate()
+        //             .find(|(_, var)| var.name == *name && var.depth <= scope_depth)
+        //             .map(|(var_idx, var)| (idx, var_idx, var.clone()))
+        //     })
+
+        todo!();
     }
 
     fn ref_context<F, R>(&mut self, func: F) -> Result<R, CompilerError>
@@ -271,6 +284,8 @@ impl Visitor for Compiler {
 
                 if let Some((idx, _)) = self.lookup_local(&name) {
                     self.chunk.add_op(Op::GetLocal(idx));
+                } else if let Some((frame_idx, var_idx, _)) = self.lookup_external_local(&name) {
+                    self.chunk.add_op(Op::GetUpvalue(frame_idx, var_idx));
                 } else {
                     let idx = self.chunk.add_const(name);
                     self.chunk.add_op(Op::GetGlobal(idx));
@@ -347,6 +362,8 @@ impl Visitor for Compiler {
         if let Some((idx, _)) = self.lookup_local(&name) {
             self.initialize_local(idx)?;
             self.chunk.add_op(Op::SetLocal(idx));
+        } else if let Some((frame_idx, var_idx, _)) = self.lookup_external_local(&name) {
+            self.chunk.add_op(Op::SetUpvalue(frame_idx, var_idx));
         } else {
             let idx = self.chunk.add_const(name);
             self.chunk.add_op(Op::SetGlobal(idx));
@@ -427,9 +444,7 @@ impl Visitor for Compiler {
                         return Err(CompilerError::LocalVariableLimit);
                     }
 
-                    let existing_local = self.find_local(&name);
-
-                    if existing_local.is_some() {
+                    if self.find_local(&name).is_some() {
                         return Err(CompilerError::DuplicateVariableInScope(name));
                     }
 
