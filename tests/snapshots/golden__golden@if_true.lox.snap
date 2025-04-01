@@ -1,9 +1,9 @@
 ---
 source: tests/golden.rs
-assertion_line: 33
+assertion_line: 34
 expression: run_test(path)
 input_file: tests/fixtures/if_true.lox
 ---
 '''
-"truthy!"
+truthy!
 '''

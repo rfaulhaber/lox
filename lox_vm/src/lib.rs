@@ -1,9 +1,10 @@
 // TODO refactor vm into separate file, tidy up lib.rs
 
+use std::rc::Rc;
 use std::{collections::HashMap, io::Write};
 
 use crate::bytecode::{Chunk, Op};
-use crate::value::{Function, Value, ValueOperatorError, native::NativeFunctionError};
+use crate::value::{Value, ValueOperatorError, native::NativeFunctionError};
 
 use native::native_functions;
 use thiserror::Error;
@@ -52,6 +53,8 @@ pub enum InterpreterError {
     ValueConversionError(#[from] ValueConvertError),
     #[error("Upvalue not found at frame {0}, var {1}")]
     UpvalueNotFound(usize, usize),
+    #[error("Missing constant at index {0} (offset {1})")]
+    MissingConstantAtIndex(usize, usize),
 }
 
 #[derive(Debug)]
@@ -97,16 +100,16 @@ impl std::fmt::Display for BinaryOp {
 
 #[derive(Debug)]
 pub struct CallFrame {
-    slots: Vec<Value>,
+    closure: Rc<Closure>,
+    slots_start: usize,
     ip: usize,
-    chunk: Chunk,
 }
 
 impl CallFrame {
-    pub fn new(chunk: Chunk) -> Self {
+    pub fn new_top_level(chunk: Chunk) -> Self {
         Self {
-            chunk,
-            slots: Vec::with_capacity(FRAME_MAX),
+            closure: Rc::new(Closure::new_top_level(chunk)),
+            slots_start: 0,
             ip: 0,
         }
     }
@@ -116,6 +119,7 @@ impl CallFrame {
 pub struct Interpreter<W: Write> {
     globals: HashMap<String, Value>,
     frames: Vec<CallFrame>,
+    stack: Vec<Value>,
     mode: InterpreterMode,
     writer: Option<W>,
 }
@@ -138,7 +142,7 @@ impl<W: Write> Interpreter<W> {
     }
 
     pub fn eval(&mut self, chunk: Chunk) -> Result<InterpreterState, InterpreterError> {
-        self.frames.push(CallFrame::new(chunk));
+        self.frames.push(CallFrame::new_top_level(chunk));
 
         self.run()
     }
@@ -153,9 +157,18 @@ impl<W: Write> Interpreter<W> {
         Interpreter {
             globals,
             frames: Vec::with_capacity(FRAME_MAX),
+            stack: Vec::with_capacity(FRAME_MAX * STACK_SIZE),
             writer,
             mode,
         }
+    }
+
+    fn push_call_frame(&mut self, closure: Rc<Closure>) {
+        self.frames.push(CallFrame {
+            closure,
+            slots_start: self.stack.len(),
+            ip: 0,
+        });
     }
 
     fn run(&mut self) -> Result<InterpreterState, InterpreterError> {
@@ -173,8 +186,17 @@ impl<W: Write> Interpreter<W> {
 
         match op {
             Some(Op::Const(index)) => {
-                let constant = self.const_at(index).cloned().unwrap();
-                self.stack_push(constant);
+                let constant = self.const_at(index);
+
+                if constant.is_none() {
+                    // TODO return more specific error
+                    return Err(InterpreterError::MissingConstantAtIndex(
+                        index,
+                        self.stack_offset(),
+                    ));
+                }
+
+                self.stack_push(constant.unwrap());
             }
             Some(Op::Return) => {
                 let result = self.stack_pop();
@@ -184,6 +206,7 @@ impl<W: Write> Interpreter<W> {
                 }
 
                 let _ = self.frames.pop();
+                let _ = self.stack.pop(); // pop callee
 
                 if self.frames.is_empty() {
                     return Ok(InterpreterState::Finished);
@@ -250,7 +273,7 @@ impl<W: Write> Interpreter<W> {
                 let value = self.stack_pop();
                 let name = match self.const_at(index) {
                     Some(Value::String(s)) => s,
-                    v => {
+                    Some(v) => {
                         return Err(InterpreterError::WrongTypeAtIndex(
                             index,
                             "string".to_string(),
@@ -270,7 +293,7 @@ impl<W: Write> Interpreter<W> {
             Some(Op::GetGlobal(index)) => {
                 let name = match self.const_at(index) {
                     Some(Value::String(s)) => s,
-                    v => {
+                    Some(v) => {
                         return Err(InterpreterError::WrongTypeAtIndex(
                             index,
                             "String".into(),
@@ -280,7 +303,7 @@ impl<W: Write> Interpreter<W> {
                     None => return Err(InterpreterError::NoValueAtIndex(index)),
                 };
 
-                let value = match self.globals.get(name) {
+                let value = match self.globals.get(&name) {
                     Some(value) => value,
                     None => return Err(InterpreterError::UndefinedVariable(name.to_string())),
                 };
@@ -290,7 +313,7 @@ impl<W: Write> Interpreter<W> {
             Some(Op::SetGlobal(index)) => {
                 let name = match self.const_at(index) {
                     Some(Value::String(s)) => s,
-                    v => {
+                    Some(v) => {
                         return Err(InterpreterError::WrongTypeAtIndex(
                             index,
                             "String".into(),
@@ -300,7 +323,7 @@ impl<W: Write> Interpreter<W> {
                     None => return Err(InterpreterError::NoValueAtIndex(index)),
                 };
 
-                if !self.globals.contains_key(name) {
+                if !self.globals.contains_key(&name) {
                     return Err(InterpreterError::UndefinedVariable(name.to_string()));
                 }
 
@@ -347,26 +370,26 @@ impl<W: Write> Interpreter<W> {
                 self.call_fn(arg_count)?;
             }
             Some(Op::Closure(index)) => {
-                let func = match self.const_at(index) {
-                    Some(value) => value.clone(),
-                    None => return Err(InterpreterError::NoValueAtIndex(index)),
+                let function = match self.const_at(index) {
+                    Some(Value::Function(f)) => f,
+                    Some(v) => {
+                        return Err(InterpreterError::WrongTypeAtIndex(
+                            index,
+                            v.type_as_string(),
+                            "function".into(),
+                        ));
+                    }
+                    // TODO more specific error type
+                    None => return Err(InterpreterError::EmptyStack),
                 };
 
-                let func_value: Closure = func.try_into()?;
-
-                if func_value.name().is_none() {
-                    let closure = Value::from(func_value);
-                    self.stack_push(closure);
-                } else {
-                    let _ = self
-                        .globals
-                        .insert(func_value.name().unwrap().to_string(), func_value.into());
-                }
+                let closure = Closure::new(function.clone());
+                self.stack_push(Value::Closure(Rc::new(closure)));
             }
-            Some(Op::GetUpvalue(frame_idx, var_idx)) => {
+            Some(Op::GetUpvalue(idx)) => {
                 todo!()
             }
-            Some(Op::SetUpvalue(frame_idx, var_idx)) => {
+            Some(Op::SetUpvalue(idx)) => {
                 todo!()
             }
             None => {
@@ -384,7 +407,7 @@ impl<W: Write> Interpreter<W> {
     fn next_op(&self) -> Option<Op> {
         self.frames
             .last()
-            .and_then(|frame| frame.chunk.code_at(frame.ip).cloned())
+            .and_then(|frame| frame.closure.func().chunk().code_at(frame.ip).cloned())
     }
 
     fn next_op_and_advance(&mut self) -> Result<Option<Op>, InterpreterError> {
@@ -448,53 +471,64 @@ impl<W: Write> Interpreter<W> {
     }
 
     fn stack_pop(&mut self) -> Option<Value> {
-        self.frames.last_mut().and_then(|frame| frame.slots.pop())
+        self.stack.pop()
     }
 
     fn stack_top(&self) -> Option<&Value> {
-        self.frames.last().and_then(|frame| frame.slots.last())
+        self.stack.last()
     }
 
     fn stack_get(&self, index: usize) -> Option<&Value> {
-        self.frames.last().and_then(|frame| frame.slots.get(index))
+        self.stack.get(index + self.stack_offset())
     }
 
     fn stack_set(&mut self, index: usize, value: Value) -> Result<(), InterpreterError> {
-        self.frames
-            .last_mut()
-            .map(|frame| frame.slots[index] = value)
-            .ok_or(InterpreterError::EmptyStack)
+        if self.stack.len() < index {
+            // TODO new error
+            return Err(InterpreterError::InsufficientCallFrameLength);
+        }
+
+        let slot_start = self
+            .frames
+            .last()
+            .map(|frame| frame.slots_start)
+            .ok_or(InterpreterError::InsufficientCallFrameLength)?;
+
+        self.stack[index + slot_start] = value;
+
+        Ok(())
     }
 
     fn stack_push(&mut self, value: Value) {
-        let frame = self.frames.last_mut();
-
-        if let Some(frame) = frame {
-            frame.slots.push(value);
-        }
+        self.stack.push(value);
     }
 
     fn stack_len(&self) -> usize {
-        self.frames.last().map(|f| f.slots.len()).unwrap_or(0)
+        self.stack
+            .len()
+            .checked_sub(self.stack_offset())
+            .unwrap_or(0)
     }
 
-    fn const_at(&self, index: usize) -> Option<&Value> {
-        self.frames.last().and_then(|f| f.chunk.const_at(index))
+    fn const_at(&self, index: usize) -> Option<Value> {
+        self.frames.last().and_then(|frame| {
+            let chunk = frame.closure.func().chunk();
+            chunk.const_at(index).cloned()
+        })
     }
 
-    fn get_ip(&self) -> Result<usize, InterpreterError> {
+    fn stack_offset(&self) -> usize {
         self.frames
             .last()
-            .map(|frame| frame.ip)
-            .ok_or(InterpreterError::InsufficientCallFrameLength)
+            .map(|frame| frame.slots_start)
+            .unwrap_or(0)
     }
 
     fn call_fn(&mut self, arg_count: usize) -> Result<(), InterpreterError> {
         let callee = self.stack_get(self.stack_len() - arg_count - 1).cloned();
 
         match callee {
-            Some(Value::Closure(closure)) => self.eval_callable(closure.func().chunk(), arg_count),
-            Some(Value::Function(func)) => self.eval_callable(func.chunk(), arg_count),
+            Some(Value::Closure(closure)) => self.eval_callable(closure, arg_count),
             Some(Value::Native(f)) => {
                 let mut arguments = Vec::new();
 
@@ -508,35 +542,34 @@ impl<W: Write> Interpreter<W> {
                 Ok(())
             }
             Some(v) => return Err(InterpreterError::ValueNotCallable(v.to_string())),
-            None => return Err(InterpreterError::EmptyStack),
+            None => {
+                println!(
+                    "stack len {}, slot start {}, offset {}, {}",
+                    self.stack_len(),
+                    self.frames.last().unwrap().slots_start,
+                    self.stack_offset(),
+                    self.stack_len() - arg_count - 1
+                );
+                return Err(InterpreterError::EmptyStack);
+            }
         }
     }
 
-    fn eval_callable(&mut self, chunk: Chunk, arg_count: usize) -> Result<(), InterpreterError> {
-        let mut call_frame = CallFrame::new(chunk);
+    fn get_callee(&mut self, arg_count: usize) -> Option<Value> {
+        self.stack_get(self.stack_len() - arg_count - 1).cloned()
+    }
 
+    fn eval_callable(
+        &mut self,
+        closure: Rc<Closure>,
+        arg_count: usize,
+    ) -> Result<(), InterpreterError> {
         if self.stack_len() < arg_count {
             // TODO insufficient argument length
             return Err(InterpreterError::InsufficientCallFrameLength);
         }
 
-        call_frame.slots = self
-            .frames
-            .last_mut()
-            .map(|f| {
-                let mut vals = Vec::new();
-
-                for _ in 0..arg_count {
-                    vals.push(f.slots.pop().unwrap())
-                }
-
-                f.slots.pop(); // pop callee
-
-                vals.into_iter().rev().collect()
-            })
-            .unwrap_or(Vec::new());
-
-        self.frames.push(call_frame);
+        self.push_call_frame(closure);
 
         Ok(())
     }
@@ -561,7 +594,7 @@ mod test {
         code.add_op(Op::Add);
 
         let mut vm: Interpreter<std::io::Empty> = Interpreter::new();
-        vm.frames.push(CallFrame::new(code));
+        vm.frames.push(CallFrame::new_top_level(code));
 
         let _ = vm.step();
         let _ = vm.step();
@@ -581,7 +614,7 @@ mod test {
         code.add_op(Op::Add);
 
         let mut vm: Interpreter<std::io::Empty> = Interpreter::new();
-        vm.frames.push(CallFrame::new(code));
+        vm.frames.push(CallFrame::new_top_level(code));
 
         let _ = vm.run();
 
@@ -589,5 +622,39 @@ mod test {
             vm.stack_top().unwrap(),
             &Value::from(String::from("foobarbaz"))
         )
+    }
+
+    #[test]
+    fn stack_length() {
+        let mut code = Chunk::new();
+        code.push_const("foo");
+        code.push_const("bar");
+        code.push_const("baz");
+
+        code.add_op(Op::Add);
+        code.add_op(Op::Add);
+
+        let mut vm: Interpreter<std::io::Empty> = Interpreter::new();
+        vm.frames.push(CallFrame::new_top_level(code.clone()));
+
+        assert_eq!(vm.stack_len(), 0);
+
+        vm.stack.push(Value::Nil);
+
+        assert_eq!(vm.stack_len(), 1);
+
+        let mut new_call_frame = CallFrame::new_top_level(code);
+        new_call_frame.slots_start = 1;
+
+        vm.frames.push(new_call_frame);
+
+        assert_eq!(vm.stack_len(), 0);
+        assert_eq!(vm.stack_offset(), 1);
+        assert_eq!(vm.stack_get(0), None);
+
+        let str = Value::String(String::from("hello world"));
+
+        vm.stack_push(str.clone());
+        assert_eq!(vm.stack_get(0), Some(&str));
     }
 }

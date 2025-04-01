@@ -1,4 +1,4 @@
-use crate::value::{Value};
+use crate::value::Value;
 use lox_source::source::Span;
 
 #[derive(Debug, Clone)]
@@ -24,8 +24,8 @@ pub enum Op {
     SetGlobal(usize),
     GetLocal(usize),
     SetLocal(usize),
-    GetUpvalue(usize, usize),
-    SetUpvalue(usize, usize),
+    GetUpvalue(usize),
+    SetUpvalue(usize),
     JumpIfFalse(usize),
     Jump(usize),
     Loop(usize),
@@ -167,11 +167,11 @@ impl Chunk {
             ),
             Op::GetLocal(index) => format!("OP_GET_LOCAL (index={})", index),
             Op::SetLocal(index) => format!("OP_SET_LOCAL (index={})", index),
-            Op::GetUpvalue(frame_idx, var_idx) => {
-                format!("OP_GET_UPVALUE (frame={}, var={})", frame_idx, var_idx)
+            Op::GetUpvalue(idx) => {
+                format!("OP_GET_UPVALUE (index={})", idx)
             }
-            Op::SetUpvalue(frame_idx, var_idx) => {
-                format!("OP_SET_UPVALUE (frame={}, var={})", frame_idx, var_idx)
+            Op::SetUpvalue(idx) => {
+                format!("OP_SET_UPVALUE (index={})", idx)
             }
             Op::Return => "OP_RETURN".into(),
             Op::Negate => "OP_NEAGATE".into(),

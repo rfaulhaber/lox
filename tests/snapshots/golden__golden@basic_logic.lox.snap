@@ -1,10 +1,10 @@
 ---
 source: tests/golden.rs
-assertion_line: 33
+assertion_line: 34
 expression: run_test(path)
 input_file: tests/fixtures/basic_logic.lox
 ---
 '''
-"hi"
-"yes"
+hi
+yes
 '''

@@ -1,13 +1,28 @@
-use super::Function;
+use std::rc::Rc;
+
+use crate::bytecode::Chunk;
+
+use super::{Function, Upvalue};
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Closure {
-    pub(crate) func: Function,
+    func: Rc<Function>,
+    upvalues: Vec<Upvalue>,
 }
 
 impl Closure {
-    pub fn new(func: Function) -> Self {
-        Self { func }
+    pub fn new(func: Rc<Function>) -> Self {
+        Self {
+            func,
+            upvalues: Vec::new(),
+        }
+    }
+
+    pub fn new_top_level(chunk: Chunk) -> Self {
+        Self {
+            func: Rc::new(Function::new_top_level(chunk)),
+            upvalues: Vec::new(),
+        }
     }
 
     pub fn name(&self) -> Option<&String> {
@@ -29,6 +44,6 @@ impl Closure {
 
 impl From<Function> for Closure {
     fn from(value: Function) -> Self {
-        Closure::new(value)
+        Closure::new(Rc::new(value))
     }
 }

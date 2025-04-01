@@ -1,5 +1,5 @@
 use anyhow::Result;
-use rustyline::{error::ReadlineError, DefaultEditor, Result as RlResult};
+use rustyline::{DefaultEditor, Result as RlResult, error::ReadlineError};
 use std::io::Write;
 use std::path::PathBuf;
 use termcolor::{Color, ColorChoice, ColorSpec, StandardStream, WriteColor};
@@ -149,7 +149,8 @@ pub fn eval_file(vm: VmOptions, print_bytecode: bool, file: PathBuf) -> Result<(
 
             let mut vm = lox_vm::Interpreter::new_with_writer(std::io::stdout());
 
-            let _ = vm.eval(bytecode)?;
+            // TODO: REWRITE!
+            let _ = vm.eval(bytecode).unwrap();
 
             Ok(())
         }

@@ -1,18 +1,10 @@
 use crate::bytecode::Chunk;
 
-use super::Closure;
-
 #[derive(Debug, Clone)]
 pub struct Function {
     name: Option<String>,
     chunk: Chunk,
     arity: usize,
-}
-
-impl From<Closure> for Function {
-    fn from(value: Closure) -> Self {
-        value.func
-    }
 }
 
 impl Function {
@@ -29,6 +21,14 @@ impl Function {
             name: None,
             chunk,
             arity,
+        }
+    }
+
+    pub fn new_top_level(chunk: Chunk) -> Self {
+        Self {
+            name: Some("top level".into()),
+            chunk,
+            arity: 0,
         }
     }
 

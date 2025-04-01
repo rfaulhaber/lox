@@ -1,3 +1,5 @@
+use std::rc::Rc;
+
 use lox_source::{
     ast::{
         decl::Decl,
@@ -198,26 +200,17 @@ impl<'c> Compiler {
         self.mut_context(|ctx| ctx.locals[idx].initialized = true)
     }
 
-    fn lookup_external_local(&self, name: &String) -> Option<(usize, usize, Local)> {
-        let scope_depth = self.scope_depth();
+    fn lookup_external_local(&self, name: &String) -> Option<(usize, &Local)> {
+        if self.context.len() < 2 {
+            return None;
+        }
 
-        // TODO there's probably a more efficient way to do this lol
-        // could probably just return a tuple of indices
-        // self.context
-        //     .iter()
-        //     .enumerate()
-        //     .rev()
-        //     .skip(1)
-        //     .map(|(idx, ctx)| (idx, ctx.locals.clone()))
-        //     .find_map(|(idx, locals)| {
-        //         locals
-        //             .iter()
-        //             .enumerate()
-        //             .find(|(_, var)| var.name == *name && var.depth <= scope_depth)
-        //             .map(|(var_idx, var)| (idx, var_idx, var.clone()))
-        //     })
+        self.context
+            .iter()
+            .rev()
+            .skip(1)
+            .find_map(|ctx| ctx.lookup_local(name))
 
-        todo!();
     }
 
     fn ref_context<F, R>(&mut self, func: F) -> Result<R, CompilerError>
@@ -284,8 +277,8 @@ impl Visitor for Compiler {
 
                 if let Some((idx, _)) = self.lookup_local(&name) {
                     self.chunk.add_op(Op::GetLocal(idx));
-                } else if let Some((frame_idx, var_idx, _)) = self.lookup_external_local(&name) {
-                    self.chunk.add_op(Op::GetUpvalue(frame_idx, var_idx));
+                } else if let Some((idx, _)) = self.lookup_external_local(&name) {
+                    self.chunk.add_op(Op::GetUpvalue(idx));
                 } else {
                     let idx = self.chunk.add_const(name);
                     self.chunk.add_op(Op::GetGlobal(idx));
@@ -362,8 +355,8 @@ impl Visitor for Compiler {
         if let Some((idx, _)) = self.lookup_local(&name) {
             self.initialize_local(idx)?;
             self.chunk.add_op(Op::SetLocal(idx));
-        } else if let Some((frame_idx, var_idx, _)) = self.lookup_external_local(&name) {
-            self.chunk.add_op(Op::SetUpvalue(frame_idx, var_idx));
+        } else if let Some((idx, _)) = self.lookup_external_local(&name) {
+            self.chunk.add_op(Op::SetUpvalue(idx));
         } else {
             let idx = self.chunk.add_const(name);
             self.chunk.add_op(Op::SetGlobal(idx));
@@ -540,6 +533,7 @@ impl Visitor for Compiler {
         parameters: Vec<Identifier>,
         body: Stmt,
     ) -> Self::Value {
+        let name = name.name.clone();
         let arity = parameters.len();
 
         self.begin_context();
@@ -575,10 +569,12 @@ impl Visitor for Compiler {
 
         self.end_context();
 
-        let new_fn = Function::new_named(name.name, fn_chunk, arity);
+        let new_fn = Function::new_named(name.clone(), fn_chunk, arity);
 
-        let idx = self.chunk.add_const(Closure::new(new_fn));
+        let idx = self.chunk.add_const(new_fn);
         self.chunk.add_op(Op::Closure(idx));
+        let idx = self.chunk.add_const(name);
+        self.chunk.add_op(Op::DefineGlobal(idx));
 
         Ok(())
     }

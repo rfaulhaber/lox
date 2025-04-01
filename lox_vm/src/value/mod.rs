@@ -1,3 +1,5 @@
+use std::{cell::RefCell, rc::Rc};
+
 pub use closure::Closure;
 pub use function::Function;
 use native::NativeFunction;
@@ -24,14 +26,29 @@ pub enum ValueConvertError {
 }
 
 #[derive(Debug, Clone, PartialEq)]
+pub struct Upvalue {
+    location: Rc<RefCell<Value>>,
+}
+
+impl Upvalue {
+    pub fn get(&self) -> Value {
+        self.location.borrow().clone()
+    }
+
+    pub fn set(&self, value: Value) {
+        *self.location.borrow_mut() = value;
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
 pub enum Value {
     Number(Number),
     Bool(bool),
     Nil,
     String(String),
-    Function(Function),
+    Function(Rc<Function>),
     Native(NativeFunction),
-    Closure(Closure),
+    Closure(Rc<Closure>),
 }
 
 impl From<f64> for Value {
@@ -60,7 +77,7 @@ impl From<String> for Value {
 
 impl From<Function> for Value {
     fn from(value: Function) -> Self {
-        Value::Function(value)
+        Value::Function(Rc::new(value))
     }
 }
 
@@ -78,7 +95,7 @@ impl From<Number> for Value {
 
 impl From<Closure> for Value {
     fn from(value: Closure) -> Self {
-        Value::Closure(value)
+        Value::Closure(Rc::new(value))
     }
 }
 
@@ -112,7 +129,7 @@ impl std::fmt::Display for Value {
                 Value::Number(n) => n.to_string(),
                 Value::Bool(b) => b.to_string(),
                 Value::Nil => String::from("nil"),
-                Value::String(s) => format!("\"{}\"", s.trim_matches('"')),
+                Value::String(s) => format!("{}", s),
                 Value::Function(f) => match f.name() {
                     Some(name) => format!("function {}/{}", name, f.arity()),
                     None => format!("function anonymous/{}", f.arity()),
@@ -229,21 +246,21 @@ impl TryInto<Number> for Value {
     }
 }
 
-impl TryInto<Function> for Value {
+impl TryInto<Rc<Function>> for Value {
     type Error = ValueConvertError;
 
-    fn try_into(self) -> Result<Function, Self::Error> {
+    fn try_into(self) -> Result<Rc<Function>, Self::Error> {
         match self {
-            Value::Function(f) => Ok(f),
+            Value::Function(f) => Ok(f.clone()),
             _ => Err(ValueConvertError::IncorrectType(format!("{:?}", self))),
         }
     }
 }
 
-impl TryInto<Closure> for Value {
+impl TryInto<Rc<Closure>> for Value {
     type Error = ValueConvertError;
 
-    fn try_into(self) -> Result<Closure, Self::Error> {
+    fn try_into(self) -> Result<Rc<Closure>, Self::Error> {
         match self {
             Value::Closure(c) => Ok(c),
             _ => Err(ValueConvertError::IncorrectType(format!("{:?}", self))),
@@ -268,6 +285,19 @@ impl Value {
             Value::Bool(false) | Value::Nil => true,
             _ => false,
         }
+    }
+
+    pub(crate) fn type_as_string(&self) -> String {
+        match self {
+            Value::Number(_) => "number",
+            Value::Bool(_) => "bool",
+            Value::Nil => "nil",
+            Value::String(_) => "string",
+            Value::Function(_) => "function",
+            Value::Native(_) => "native function",
+            Value::Closure(_) => "closure",
+        }
+        .into()
     }
 }
 
