@@ -1,4 +1,4 @@
-use crate::value::{Function, Object, Value};
+use crate::value::{Value};
 use lox_source::source::Span;
 
 #[derive(Debug, Clone)]
@@ -109,7 +109,7 @@ impl Chunk {
         for (i, f) in self.consts.iter().enumerate() {
             match f {
                 // TODO dedupe
-                Value::Object(Object::Function(func)) => {
+                Value::Function(func) => {
                     main_body.push(format!(
                         "FN_DEF (index={}): ({})",
                         i,
@@ -118,7 +118,7 @@ impl Chunk {
 
                     main_body.append(&mut func.chunk().disassemble());
                 }
-                Value::Object(Object::Closure(closure)) => {
+                Value::Closure(closure) => {
                     let func = closure.func();
                     main_body.push(format!(
                         "CLOSURE_DEF (index={}): ({})",
@@ -167,8 +167,12 @@ impl Chunk {
             ),
             Op::GetLocal(index) => format!("OP_GET_LOCAL (index={})", index),
             Op::SetLocal(index) => format!("OP_SET_LOCAL (index={})", index),
-            Op::GetUpvalue(frame_idx, var_idx) => format!("OP_GET_UPVALUE (frame={}, var={})", frame_idx, var_idx),
-            Op::SetUpvalue(frame_idx, var_idx) => format!("OP_SET_UPVALUE (frame={}, var={})", frame_idx, var_idx),
+            Op::GetUpvalue(frame_idx, var_idx) => {
+                format!("OP_GET_UPVALUE (frame={}, var={})", frame_idx, var_idx)
+            }
+            Op::SetUpvalue(frame_idx, var_idx) => {
+                format!("OP_SET_UPVALUE (frame={}, var={})", frame_idx, var_idx)
+            }
             Op::Return => "OP_RETURN".into(),
             Op::Negate => "OP_NEAGATE".into(),
             Op::Add => "OP_ADD".into(),

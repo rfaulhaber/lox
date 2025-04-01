@@ -3,7 +3,7 @@
 use std::{collections::HashMap, io::Write};
 
 use crate::bytecode::{Chunk, Op};
-use crate::value::{Function, Object, Value, ValueOperatorError, native::NativeFunctionError};
+use crate::value::{Function, Value, ValueOperatorError, native::NativeFunctionError};
 
 use native::native_functions;
 use thiserror::Error;
@@ -249,7 +249,7 @@ impl<W: Write> Interpreter<W> {
             Some(Op::DefineGlobal(index)) => {
                 let value = self.stack_pop();
                 let name = match self.const_at(index) {
-                    Some(Value::Object(Object::String(s))) => s,
+                    Some(Value::String(s)) => s,
                     v => {
                         return Err(InterpreterError::WrongTypeAtIndex(
                             index,
@@ -269,7 +269,7 @@ impl<W: Write> Interpreter<W> {
             }
             Some(Op::GetGlobal(index)) => {
                 let name = match self.const_at(index) {
-                    Some(Value::Object(Object::String(s))) => s,
+                    Some(Value::String(s)) => s,
                     v => {
                         return Err(InterpreterError::WrongTypeAtIndex(
                             index,
@@ -289,7 +289,7 @@ impl<W: Write> Interpreter<W> {
             }
             Some(Op::SetGlobal(index)) => {
                 let name = match self.const_at(index) {
-                    Some(Value::Object(Object::String(s))) => s,
+                    Some(Value::String(s)) => s,
                     v => {
                         return Err(InterpreterError::WrongTypeAtIndex(
                             index,
@@ -493,13 +493,9 @@ impl<W: Write> Interpreter<W> {
         let callee = self.stack_get(self.stack_len() - arg_count - 1).cloned();
 
         match callee {
-            Some(Value::Object(Object::Closure(closure))) => {
-                self.eval_callable(closure.func().chunk(), arg_count)
-            }
-            Some(Value::Object(Object::Function(func))) => {
-                self.eval_callable(func.chunk(), arg_count)
-            }
-            Some(Value::Object(Object::Native(f))) => {
+            Some(Value::Closure(closure)) => self.eval_callable(closure.func().chunk(), arg_count),
+            Some(Value::Function(func)) => self.eval_callable(func.chunk(), arg_count),
+            Some(Value::Native(f)) => {
                 let mut arguments = Vec::new();
 
                 for _ in 0..f.arity() {

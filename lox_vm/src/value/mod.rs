@@ -2,14 +2,12 @@ pub use closure::Closure;
 pub use function::Function;
 use native::NativeFunction;
 pub use number::Number;
-pub use object::Object;
 use thiserror::Error;
 
 mod closure;
 mod function;
 pub mod native;
 mod number;
-mod object;
 
 #[derive(Debug, Clone, Error, PartialEq)]
 pub enum ValueOperatorError {
@@ -30,7 +28,10 @@ pub enum Value {
     Number(Number),
     Bool(bool),
     Nil,
-    Object(Object),
+    String(String),
+    Function(Function),
+    Native(NativeFunction),
+    Closure(Closure),
 }
 
 impl From<f64> for Value {
@@ -53,19 +54,19 @@ impl From<bool> for Value {
 
 impl From<String> for Value {
     fn from(value: String) -> Self {
-        Value::Object(Object::String(String::from(value.trim_matches('"'))))
+        Value::String(String::from(value.trim_matches('"')))
     }
 }
 
 impl From<Function> for Value {
     fn from(value: Function) -> Self {
-        Value::Object(Object::Function(value))
+        Value::Function(value)
     }
 }
 
 impl From<NativeFunction> for Value {
     fn from(value: NativeFunction) -> Self {
-        Value::Object(Object::Native(value))
+        Value::Native(value)
     }
 }
 
@@ -77,13 +78,13 @@ impl From<Number> for Value {
 
 impl From<Closure> for Value {
     fn from(value: Closure) -> Self {
-        Value::Object(Object::Closure(value))
+        Value::Closure(value)
     }
 }
 
 impl<'s> From<&'s str> for Value {
     fn from(value: &'s str) -> Self {
-        Value::Object(Object::String(String::from(value.trim_matches('"'))))
+        Value::String(String::from(value.trim_matches('"')))
     }
 }
 
@@ -111,15 +112,15 @@ impl std::fmt::Display for Value {
                 Value::Number(n) => n.to_string(),
                 Value::Bool(b) => b.to_string(),
                 Value::Nil => String::from("nil"),
-                Value::Object(Object::String(s)) => format!("\"{}\"", s.trim_matches('"')),
-                Value::Object(Object::Function(f)) => match f.name() {
+                Value::String(s) => format!("\"{}\"", s.trim_matches('"')),
+                Value::Function(f) => match f.name() {
                     Some(name) => format!("function {}/{}", name, f.arity()),
                     None => format!("function anonymous/{}", f.arity()),
                 },
-                Value::Object(Object::Native(f)) => {
+                Value::Native(f) => {
                     format!("<native {}/{}>", f.name(), f.arity())
                 }
-                Value::Object(Object::Closure(cl)) => {
+                Value::Closure(cl) => {
                     format!(
                         "<closure {}/{}>",
                         cl.name().map_or("anonymous", |v| v),
@@ -137,9 +138,7 @@ impl std::ops::Add for Value {
     fn add(self, rhs: Self) -> Self::Output {
         match (self, rhs) {
             (Value::Number(l), Value::Number(r)) => Ok(Value::Number(l + r)),
-            (Value::Object(Object::String(left)), Value::Object(Object::String(right))) => {
-                Ok(Value::from(left + &right))
-            }
+            (Value::String(left), Value::String(right)) => Ok(Value::from(left + &right)),
             (left, right) => Err(ValueOperatorError::IncompatibleTypes(
                 "+".into(),
                 left.to_string(),
@@ -235,7 +234,7 @@ impl TryInto<Function> for Value {
 
     fn try_into(self) -> Result<Function, Self::Error> {
         match self {
-            Value::Object(Object::Function(f)) => Ok(f),
+            Value::Function(f) => Ok(f),
             _ => Err(ValueConvertError::IncorrectType(format!("{:?}", self))),
         }
     }
@@ -246,7 +245,7 @@ impl TryInto<Closure> for Value {
 
     fn try_into(self) -> Result<Closure, Self::Error> {
         match self {
-            Value::Object(Object::Closure(c)) => Ok(c),
+            Value::Closure(c) => Ok(c),
             _ => Err(ValueConvertError::IncorrectType(format!("{:?}", self))),
         }
     }
@@ -257,7 +256,7 @@ impl TryInto<String> for Value {
 
     fn try_into(self) -> Result<String, Self::Error> {
         match self {
-            Value::Object(Object::String(s)) => Ok(s),
+            Value::String(s) => Ok(s),
             _ => Err(ValueConvertError::IncorrectType(format!("{:?}", self))),
         }
     }
@@ -276,9 +275,7 @@ impl std::cmp::PartialOrd for Value {
     fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
         match (self, other) {
             (Value::Number(left), Value::Number(right)) => left.partial_cmp(right),
-            (Value::Object(Object::String(left)), Value::Object(Object::String(right))) => {
-                left.partial_cmp(right)
-            }
+            (Value::String(left), Value::String(right)) => left.partial_cmp(right),
             _ => None,
         }
     }
