@@ -12,6 +12,7 @@ fn run_test(file_path: &Path) -> String {
         .expect("Could not create compiler")
         .compile()
         .expect("Could not compile code")
+        .chunk()
         .disassemble()
         .join("\n")
 }

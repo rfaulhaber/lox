@@ -17,6 +17,12 @@ pub enum ValueOperatorError {
     IncompatibleTypes(String, String, String),
     #[error("Cannot apply {0} to {1}")]
     IncompatibleUnaryOperation(String, String),
+    #[error("Invalid add operands {0} {1}")]
+    InvalidAddOperands(Value, Value),
+    #[error("Division by zero")]
+    DivisionByZero,
+    #[error("Invalid arithemetic operands {0} {1}")]
+    InvalidArithmeticOperands(Value, Value),
 }
 
 #[derive(Debug, Clone, PartialEq, Error)]
@@ -47,6 +53,7 @@ pub enum Value {
     Nil,
     String(String),
     Function(Rc<Function>),
+    // TODO wrap in Rc
     Native(NativeFunction),
     Closure(Rc<Closure>),
 }

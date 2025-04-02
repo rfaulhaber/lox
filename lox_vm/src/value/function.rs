@@ -40,9 +40,12 @@ impl Function {
         self.arity
     }
 
-    pub fn chunk(&self) -> Chunk {
-        // TODO avoid cloning
-        self.chunk.clone()
+    pub fn chunk(&self) -> &Chunk {
+        &self.chunk
+    }
+
+    pub fn chunk_mut(&mut self) -> &mut Chunk {
+        &mut self.chunk
     }
 }
 

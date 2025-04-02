@@ -101,7 +101,7 @@ pub fn repl(options: ReplOptions) -> RlResult<()> {
                 let bytecode = compiler.compile().expect("compilation failed");
 
                 if options.bytecode {
-                    writeln!(&mut stdout, "{}", bytecode.disassemble().join("\n"))?;
+                    writeln!(&mut stdout, "{}", bytecode.chunk().disassemble().join("\n"))?;
                 }
 
                 match vm.eval(bytecode) {
@@ -144,7 +144,7 @@ pub fn eval_file(vm: VmOptions, print_bytecode: bool, file: PathBuf) -> Result<(
             let bytecode = compiler.compile().expect("compilation failed");
 
             if print_bytecode {
-                writeln!(&mut stdout, "{}", bytecode.disassemble().join("\n"))?;
+                writeln!(&mut stdout, "{}", bytecode.chunk().disassemble().join("\n"))?;
             }
 
             let mut vm = lox_vm::Interpreter::new_with_writer(std::io::stdout());
@@ -165,7 +165,7 @@ pub fn disassemble(path: PathBuf) -> Result<()> {
 
     let res = compiler.compile().expect("compilation failed");
 
-    let dsm = res.disassemble();
+    let dsm = res.chunk().disassemble();
 
     println!("{}", dsm.join("\n"));
 

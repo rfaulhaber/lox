@@ -4,6 +4,15 @@ pub enum Number {
     Float(f64),
 }
 
+impl Number {
+    pub(crate) fn is_zero(&self) -> bool {
+        match self {
+            Number::Int(0) |  Number::Float(0.0) => true,
+            _ => false,
+        }
+    }
+}
+
 impl std::fmt::Display for Number {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(

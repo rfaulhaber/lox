@@ -1,20 +1,17 @@
-use std::rc::Rc;
+// lox_compiler/src/lib.rs
 
 use lox_source::{
     ast::{
         decl::Decl,
-        expr::{BinaryOperator, Expr, Identifier, Literal, LogicalOperator, Number, UnaryOperator},
+        expr::{BinaryOperator, Expr, Identifier, Literal, LogicalOperator, UnaryOperator},
         program::Program,
         stmt::Stmt,
         visitor::Visitor,
     },
     parser::{ParseError, Parser},
 };
-use lox_vm::value::Function;
-use lox_vm::{
-    bytecode::{Chunk, Op},
-    value::Closure,
-};
+use lox_vm::bytecode::{Chunk, Op};
+use lox_vm::value::{Function, Value};
 use thiserror::Error;
 
 #[derive(Debug, Clone, Error)]
@@ -42,27 +39,33 @@ pub struct Local {
 
 #[derive(Debug)]
 pub struct Context {
+    function: Function,
     locals: Vec<Local>,
     scope_depth: usize,
 }
 
 impl<'c> Context {
-    pub fn new() -> Self {
+    pub fn new(function_name: Option<String>, arity: usize) -> Self {
+        let mut locals = Vec::with_capacity(LOCALS_COUNT as usize);
+        // Reserve slot 0 for the function itself (or 'this' in methods)
+        locals.push(Local {
+            // Name slot 0 appropriately depending on context (e.g., "" for script/function, "this" for method)
+            name: "".to_string(),
+            depth: 0,
+            initialized: true, // Slot 0 is implicitly initialized
+        });
         Self {
-            locals: Vec::with_capacity(LOCALS_COUNT.into()),
+            function: match function_name {
+                Some(name) => Function::new_named(name, Chunk::new(), arity),
+                None => Function::new_anonymous(Chunk::new(), arity),
+            },
+            locals,
             scope_depth: 0,
         }
     }
 
-    /// Returns a reference to a local named `name` in the current scope.
-    pub fn find_local(&self, name: &String) -> Option<&Local> {
-        if self.scope_depth == 0 {
-            return None;
-        }
-
-        self.locals
-            .iter()
-            .find(|local| local.name == *name && local.depth == self.scope_depth)
+    pub fn new_top_level() -> Self {
+        Self::new(Some("top level".into()), 0)
     }
 
     /// Returns the index of the local and the local where `name` == local.name, if it exists.
@@ -78,11 +81,19 @@ impl<'c> Context {
             .rev()
             .find(|(_, local)| local.name == *name)
     }
+
+    /// Returns a reference to a local named `name` declared *strictly within* the current innermost scope.
+    pub fn find_local_in_current_scope(&self, name: &str) -> Option<&Local> {
+        // Search backwards only through locals at the current depth
+        self.locals
+            .iter()
+            .rev()
+            .find(|local| local.name == name && local.depth == self.scope_depth)
+    }
 }
 
 pub struct Compiler {
     ast: Program,
-    chunk: Chunk,
     context: Vec<Context>,
 }
 
@@ -96,10 +107,9 @@ impl<'c> Compiler {
     pub fn new(source: Program) -> Self {
         Self {
             ast: source,
-            chunk: Chunk::new(),
             context: {
                 let mut context = Vec::with_capacity(256);
-                context.push(Context::new());
+                context.push(Context::new_top_level());
                 context
             },
         }
@@ -111,147 +121,235 @@ impl<'c> Compiler {
         Ok(Compiler::new(program))
     }
 
-    pub fn compile(mut self) -> Result<Chunk, CompilerError> {
+    pub fn compile(mut self) -> Result<Function, CompilerError> {
         let _ = self.visit_program(self.ast.clone())?;
 
-        Ok(self.chunk)
+        Ok(self
+            .context
+            .pop()
+            .expect("Compiler context stack empty")
+            .function)
     }
 
-    fn begin_scope(&mut self) -> Result<(), CompilerError> {
-        self.context
-            .last_mut()
-            .map(|ctx| ctx.scope_depth += 1)
-            .ok_or(CompilerError::NoContextFound)
+    fn begin_scope(&mut self) {
+        self.current_context_mut().scope_depth += 1;
     }
 
     fn end_scope(&mut self) -> Result<(), CompilerError> {
-        let count = self
-            .context
-            .last_mut()
-            .map(|ctx| {
-                ctx.locals
-                    .iter()
-                    .filter(|l| l.depth == ctx.scope_depth)
-                    .count()
-            })
-            .ok_or(CompilerError::NoContextFound)?;
+        let ctx = self.current_context_mut();
+        ctx.scope_depth -= 1;
 
-        for _ in 0..count {
-            self.chunk.add_op(Op::Pop);
+        // Pop locals defined in the scope that just ended
+        let mut pop_count = 0;
+        while let Some(local) = ctx.locals.last() {
+            if local.depth > ctx.scope_depth {
+                ctx.locals.pop();
+                pop_count += 1;
+            } else {
+                break;
+            }
         }
 
-        self.context
-            .last_mut()
-            .map(|ctx| {
-                ctx.scope_depth -= 1;
-                ctx.locals.retain(|local| local.depth <= ctx.scope_depth);
-            })
-            .ok_or(CompilerError::NoContextFound)
+        // Emit Pop instructions for the removed locals
+        for _ in 0..pop_count {
+            self.emit_op(Op::Pop);
+        }
+        Ok(())
     }
 
-    fn begin_context(&mut self) {
-        self.context.push(Context::new());
+    fn begin_function_context(&mut self, name: Option<String>, arity: usize) {
+        self.context.push(Context::new(name, arity));
     }
 
-    fn end_context(&mut self) {
-        let _ = self.context.pop();
+    fn end_function_context(&mut self) -> Result<Function, CompilerError> {
+        self.current_chunk_mut().add_op(Op::Return);
+
+        let finished_function = self.context.pop().unwrap().function;
+
+        Ok(finished_function)
     }
 
-    fn scope_depth(&self) -> usize {
-        self.context
-            .last()
-            .map(|ctx| ctx.scope_depth)
-            .unwrap_or_default() // maybe I should not do this lol
+    #[inline]
+    fn current_context(&self) -> &Context {
+        self.context.last().expect("Context stack empty")
     }
 
-    fn locals_count(&mut self) -> usize {
-        self.ref_context(|ctx| ctx.locals.len()).unwrap_or_default()
+    #[inline]
+    fn current_context_mut(&mut self) -> &mut Context {
+        self.context.last_mut().expect("Context stack empty")
     }
 
-    fn add_local(&mut self, name: String) -> Result<usize, CompilerError> {
-        self.mut_context(|ctx| {
-            let idx = ctx.locals.len();
-            ctx.locals.push(Local {
-                name,
-                depth: ctx.scope_depth,
-                initialized: false,
-            });
-            idx
-        })
+    #[inline]
+    fn current_chunk_mut(&mut self) -> &mut Chunk {
+        self.current_context_mut().function.chunk_mut()
     }
 
-    fn find_local(&mut self, name: &String) -> Option<&Local> {
-        if self.scope_depth() == 0 {
-            return None;
+    fn declare_variable(&mut self, name: &String) -> Result<(), CompilerError> {
+        // Global scope
+        if self.current_context().scope_depth == 0 {
+            // For globals, definition happens when the initializer is evaluated (or Nil is pushed).
+            // Nothing to do at declaration time for globals.
+            return Ok(());
         }
 
-        self.context.last().map(|ctx| ctx.find_local(name))?
-    }
-
-    fn lookup_local(&mut self, name: &String) -> Option<(usize, &Local)> {
-        if self.scope_depth() == 0 {
-            return None;
+        // Local scope
+        // Check for redeclaration in the *same* scope
+        if let Some(_) = self.current_context().find_local_in_current_scope(name) {
+            return Err(CompilerError::DuplicateVariableInScope(name.clone()));
         }
 
-        self.context.last().map(|ctx| ctx.lookup_local(name))?
-    }
+        // TODO Check limit before adding
+        // if self.current_context().locals.len() as u8 >= LOCALS_COUNT {
+        //     return Err(CompilerError::LocalVariableLimit(LOCALS_COUNT));
+        // }
 
-    fn initialize_local(&mut self, idx: usize) -> Result<(), CompilerError> {
-        self.mut_context(|ctx| ctx.locals[idx].initialized = true)
-    }
-
-    fn lookup_external_local(&self, name: &String) -> Option<(usize, &Local)> {
-        if self.context.len() < 2 {
-            return None;
-        }
-
-        self.context
-            .iter()
-            .rev()
-            .skip(1)
-            .find_map(|ctx| ctx.lookup_local(name))
-
-    }
-
-    fn ref_context<F, R>(&mut self, func: F) -> Result<R, CompilerError>
-    where
-        F: FnOnce(&Context) -> R,
-    {
-        self.context
-            .last()
-            .map(func)
-            .ok_or(CompilerError::NoContextFound)
-    }
-
-    fn mut_context<F, R>(&mut self, func: F) -> Result<R, CompilerError>
-    where
-        F: FnOnce(&mut Context) -> R,
-    {
-        self.context
-            .last_mut()
-            .map(func)
-            .ok_or(CompilerError::NoContextFound)
-    }
-
-    fn jump_around<F>(&mut self, jump_type: JumpType, func: F) -> Result<(), CompilerError>
-    where
-        F: FnOnce(&mut Compiler) -> Result<(), CompilerError>,
-    {
-        let start_pos = self.chunk.code_len();
-
-        let _ = func(self)?;
-
-        let dist = self.chunk.code_len() - start_pos;
-
-        let op = match jump_type {
-            JumpType::JumpIfFalse => Op::JumpIfFalse(dist + 1),
-            JumpType::JumpIfFalseWithExtraOffset => Op::JumpIfFalse(dist + 2),
-            JumpType::Jump => Op::Jump(dist + 1),
+        // Add the local as uninitialized
+        let local = Local {
+            name: name.clone(),
+            depth: self.current_context().scope_depth,
+            initialized: false, // Mark as uninitialized initially
         };
+        self.current_context_mut().locals.push(local);
+        Ok(())
+    }
 
-        self.chunk.insert_op(start_pos, op);
-        self.chunk.insert_op(start_pos + 1, Op::Pop);
+    /// Defines a variable. For locals, marks as initialized. For globals, emits DefineGlobal.
+    fn define_variable(&mut self, name_const_index: Option<usize>) -> Result<(), CompilerError> {
+        // If local, mark the last declared local as initialized.
+        if self.current_context().scope_depth > 0 {
+            self.mark_last_local_initialized();
+            // No code emitted here; initialization value is already on the stack.
+            return Ok(());
+        }
 
+        // If global, emit DefineGlobal using the constant index of the name.
+        if let Some(index) = name_const_index {
+            self.emit_op(Op::DefineGlobal(index));
+        } else {
+            // This should not happen if declare_variable/parse_variable handled globals correctly
+            panic!("Missing constant index for global variable definition");
+        }
+        Ok(())
+    }
+
+    fn parse_variable(&mut self, name: &Identifier) -> Result<(Op, Op), CompilerError> {
+        // Returns (get_op, set_op) templates
+        let id_name = &name.name;
+
+        // Try resolving as local first
+        if let Some((index, local)) = self.current_context().lookup_local(id_name) {
+            // Check if accessing uninitialized local in its own initializer (semantic check)
+            if !local.initialized {
+                // This check should ideally happen *during* initializer compilation
+                // return Err(CompilerError::VariableUsedInInitializer(id_name.clone()));
+                // For now, we allow it but the VM might read garbage if set isn't emitted first.
+            }
+            // TODO: Handle index > 255 if needed (Op::Get/SetLocalLong)
+            Ok((Op::GetLocal(index), Op::SetLocal(index)))
+        } else {
+            // Assume global
+            // TODO: Add upvalue resolution here later
+            let index = self.emit_const(id_name.clone())?;
+            // TODO: Handle index > 255 if needed (Op::Get/SetGlobalLong)
+            Ok((Op::GetGlobal(index), Op::SetGlobal(index)))
+        }
+    }
+
+    /// Marks the most recently added local variable as initialized.
+    fn mark_last_local_initialized(&mut self) {
+        if self.current_context().scope_depth == 0 {
+            return;
+        } // Not applicable to globals
+        self.current_context_mut()
+            .locals
+            .last_mut()
+            .map(|l| l.initialized = true);
+    }
+
+    #[inline]
+    fn emit_op(&mut self, op: Op) {
+        // TODO: Add line number information from AST node
+        self.current_chunk_mut().add_op(op);
+    }
+
+    #[inline]
+    fn emit_ops(&mut self, ops: &[Op]) {
+        for op in ops {
+            self.emit_op(op.clone());
+        }
+    }
+
+    /// Emits a constant and returns its index.
+    fn emit_const<V: Into<Value>>(&mut self, value: V) -> Result<usize, CompilerError> {
+        let index = self.current_chunk_mut().add_const(value.into());
+        // Optional: Check if index exceeds max constants (e.g., u8::MAX or u16::MAX)
+        Ok(index)
+    }
+
+    /// Emits Op::Const for a given value.
+    fn emit_const_op<V: Into<Value>>(&mut self, value: V) -> Result<(), CompilerError> {
+        let index = self.emit_const(value)?;
+        // TODO: Handle potential need for Op::ConstLong if index > 255
+        self.emit_op(Op::Const(index));
+        Ok(())
+    }
+
+    /// Emits a jump instruction (like JumpIfFalse or Jump) with a placeholder offset.
+    /// Returns the index of the placeholder instruction for later patching.
+    fn emit_jump(&mut self, jump_op_template: Op) -> usize {
+        self.emit_op(jump_op_template); // Emit with placeholder offset (usually 0 or max)
+        self.current_chunk_mut().code_len() - 1 // Return index of the jump op
+    }
+
+    /// Patches a previously emitted jump instruction at `jump_index`.
+    /// Calculates the offset from the instruction *after* the jump to the current end of the chunk.
+    fn patch_jump(&mut self, jump_index: usize) -> Result<(), CompilerError> {
+        // Offset = (current code end) - (index after jump instruction)
+        let offset = self.current_chunk_mut().code_len() - (jump_index + 1);
+
+        // TODO: Check if offset fits in the jump instruction's operand (e.g., u16)
+        // if offset > u16::MAX as usize {
+        //     // Assuming jumps use u16 offsets eventually
+        //     return Err(CompilerError::JumpOffsetTooLarge);
+        // }
+
+        // Update the jump instruction's offset
+        match self.current_chunk_mut().code_mut()[jump_index] {
+            Op::JumpIfFalse(ref mut placeholder) => *placeholder = offset,
+            Op::Jump(ref mut placeholder) => *placeholder = offset,
+            // Add other jump types if needed
+            // TODO do not panic?
+            _ => panic!(
+                "Attempted to patch non-jump instruction at index {}",
+                jump_index
+            ),
+        }
+        Ok(())
+    }
+
+    /// Emits a loop instruction (jumps backward).
+    fn emit_loop(&mut self, loop_start_index: usize) -> Result<(), CompilerError> {
+        // Offset = (instruction after loop op) - loop_start_index
+        let offset = self.current_chunk_mut().code_len() + 1 - loop_start_index; // +1 for the loop op itself
+
+        // TODO: Check offset size
+        // if offset > u16::MAX as usize {
+        //     return Err(CompilerError::JumpOffsetTooLarge);
+        // }
+
+        self.emit_op(Op::Loop(offset));
+        Ok(())
+    }
+
+    /// Emits Nil and Return. Should be called at the end of function compilation.
+    fn emit_return(&mut self) -> Result<(), CompilerError> {
+        // TODO: If implementing initializers, return `this` (local slot 0) instead of nil.
+        // if self.current_context().function_type == FunctionType::Initializer {
+        //    self.emit_op(Op::GetLocal(0)); // Get 'this'
+        // } else {
+        self.emit_op(Op::Nil);
+        // }
+        self.emit_op(Op::Return);
         Ok(())
     }
 }
@@ -267,23 +365,11 @@ impl Visitor for Compiler {
             Expr::Binary(left, op, right) => self.visit_binary_expr(*left, op, *right),
             Expr::Logical(left, op, right) => self.visit_logical_expr(*left, op, *right),
             Expr::Grouping(expr) => self.visit_expr(*expr),
-            Expr::Get(_, _) => todo!(),
-            Expr::Set(_, _, _) => todo!(),
+            Expr::Get(_, _) => todo!("get expressions not implemented"),
+            Expr::Set(_, _, _) => todo!("set expressions not implemented"),
             Expr::Var(id) => {
-                // TODO refactor into method
-                let name = id.name;
-
-                // TODO lookup upvalue
-
-                if let Some((idx, _)) = self.lookup_local(&name) {
-                    self.chunk.add_op(Op::GetLocal(idx));
-                } else if let Some((idx, _)) = self.lookup_external_local(&name) {
-                    self.chunk.add_op(Op::GetUpvalue(idx));
-                } else {
-                    let idx = self.chunk.add_const(name);
-                    self.chunk.add_op(Op::GetGlobal(idx));
-                }
-
+                let (get_op, _) = self.parse_variable(&id)?;
+                self.emit_op(get_op);
                 Ok(())
             }
             Expr::Assignment(id, expr) => self.visit_assignment_expr(id, *expr),
@@ -291,53 +377,42 @@ impl Visitor for Compiler {
     }
 
     fn visit_unary_expr(&mut self, op: UnaryOperator, expr: Expr) -> Self::Value {
-        let _ = self.visit_expr(expr)?;
+        self.visit_expr(expr)?; // Compile operand first
 
-        let opcode = match op {
-            UnaryOperator::Neg => Op::Negate,
-            UnaryOperator::Not => Op::Not,
-        };
-
-        self.chunk.add_op(opcode);
-
-        Ok(())
-    }
-
-    fn visit_binary_expr(&mut self, left: Expr, op: BinaryOperator, right: Expr) -> Self::Value {
-        let _ = self.visit_expr(left)?;
-        let _ = self.visit_expr(right)?;
-
-        let opcode: &[Op] = match op {
-            BinaryOperator::Eq => &[Op::Equal],
-            BinaryOperator::Neq => &[Op::Equal, Op::Not],
-            BinaryOperator::Lt => &[Op::Less],
-            BinaryOperator::Lte => &[Op::Greater, Op::Not],
-            BinaryOperator::Gt => &[Op::Greater],
-            BinaryOperator::Gte => &[Op::Less, Op::Not],
-            BinaryOperator::Add => &[Op::Add],
-            BinaryOperator::Sub => &[Op::Subtract],
-            BinaryOperator::Mul => &[Op::Multiply],
-            BinaryOperator::Div => &[Op::Divide],
-        };
-
-        for op in opcode {
-            self.chunk.add_op(op.clone());
+        match op {
+            UnaryOperator::Neg => self.emit_op(Op::Negate),
+            UnaryOperator::Not => self.emit_op(Op::Not),
         }
 
         Ok(())
     }
 
+    fn visit_binary_expr(&mut self, left: Expr, op: BinaryOperator, right: Expr) -> Self::Value {
+        self.visit_expr(left)?;
+        self.visit_expr(right)?;
+
+        match op {
+            BinaryOperator::Eq => self.emit_op(Op::Equal),
+            BinaryOperator::Neq => self.emit_ops(&[Op::Equal, Op::Not]),
+            BinaryOperator::Lt => self.emit_op(Op::Less),
+            BinaryOperator::Lte => self.emit_ops(&[Op::Greater, Op::Not]),
+            BinaryOperator::Gt => self.emit_op(Op::Greater),
+            BinaryOperator::Gte => self.emit_ops(&[Op::Less, Op::Not]),
+            BinaryOperator::Add => self.emit_op(Op::Add),
+            BinaryOperator::Sub => self.emit_op(Op::Subtract),
+            BinaryOperator::Mul => self.emit_op(Op::Multiply),
+            BinaryOperator::Div => self.emit_op(Op::Divide),
+        }
+        Ok(())
+    }
+
     fn visit_literal(&mut self, literal: Literal) -> Self::Value {
         match literal {
-            Literal::Number(n) => {
-                let _ = self.chunk.push_const(n);
-            }
-            Literal::String(s) => {
-                let _ = self.chunk.push_const(s);
-            }
-            Literal::Bool(true) => self.chunk.add_op(Op::True),
-            Literal::Bool(false) => self.chunk.add_op(Op::False),
-            Literal::Nil => self.chunk.add_op(Op::Nil),
+            Literal::Number(n) => self.emit_const_op(n)?,
+            Literal::String(s) => self.emit_const_op(s)?,
+            Literal::Bool(true) => self.emit_op(Op::True),
+            Literal::Bool(false) => self.emit_op(Op::False),
+            Literal::Nil => self.emit_op(Op::Nil),
         };
 
         Ok(())
@@ -348,58 +423,58 @@ impl Visitor for Compiler {
     }
 
     fn visit_assignment_expr(&mut self, id: Identifier, expr: Expr) -> Self::Value {
-        let _ = self.visit_expr(expr)?;
-
-        let name = id.name;
-
-        if let Some((idx, _)) = self.lookup_local(&name) {
-            self.initialize_local(idx)?;
-            self.chunk.add_op(Op::SetLocal(idx));
-        } else if let Some((idx, _)) = self.lookup_external_local(&name) {
-            self.chunk.add_op(Op::SetUpvalue(idx));
-        } else {
-            let idx = self.chunk.add_const(name);
-            self.chunk.add_op(Op::SetGlobal(idx));
-        }
-
+        self.visit_expr(expr)?; // Evaluate the RHS value first
+        let (_, set_op) = self.parse_variable(&id)?; // Get the appropriate Set instruction
+        self.emit_op(set_op);
+        // Assignment is an expression, leave the assigned value on the stack
         Ok(())
     }
 
     fn visit_logical_expr(&mut self, left: Expr, op: LogicalOperator, right: Expr) -> Self::Value {
-        let _ = self.visit_expr(left)?;
-
         match op {
             LogicalOperator::And => {
-                self.jump_around(JumpType::JumpIfFalse, |compiler| compiler.visit_expr(right))?;
+                // Compile LHS
+                self.visit_expr(left)?;
+                // If LHS is false, jump over RHS and the Pop after it
+                let end_jump = self.emit_jump(Op::JumpIfFalse(0)); // Placeholder offset
+                // If LHS was true, it's still on the stack. Pop it.
+                self.emit_op(Op::Pop);
+                // Compile RHS (only executed if LHS was true)
+                self.visit_expr(right)?;
+                // Patch the jump to land here
+                self.patch_jump(end_jump)?;
             }
             LogicalOperator::Or => {
-                self.chunk.add_op(Op::JumpIfFalse(1));
-                let jump_pos = self.chunk.code_len();
+                // *** FIX 3: Correct logical 'or' compilation ***
+                // Compile LHS
+                self.visit_expr(left)?;
+                // If LHS is falsey, jump to RHS evaluation
+                let else_jump = self.emit_jump(Op::JumpIfFalse(0)); // Placeholder
+                // If LHS is true, jump *over* RHS evaluation
+                let end_jump = self.emit_jump(Op::Jump(0)); // Placeholder
 
-                self.chunk.add_op(Op::Pop);
+                // Patch else_jump: If LHS was false, land here.
+                self.patch_jump(else_jump)?;
+                // Pop the falsey LHS value before evaluating RHS
+                self.emit_op(Op::Pop);
+                // Compile RHS
+                self.visit_expr(right)?;
 
-                let _ = self.visit_expr(right)?;
-
-                let dist = self.chunk.code_len() - jump_pos;
-
-                self.chunk.insert_op(jump_pos, Op::Jump(dist));
+                // Patch end_jump: If LHS was true, land here, skipping RHS and Pop.
+                self.patch_jump(end_jump)?;
             }
-        };
-
+        }
         Ok(())
     }
 
     fn visit_call_expr(&mut self, callee: Expr, arguments: Vec<Expr>) -> Self::Value {
-        let _ = self.visit_expr(callee)?;
-
         let arg_count = arguments.len();
-
-        for expr in arguments {
-            let _ = self.visit_expr(expr)?;
+        // TODO: Check arg_count limit (e.g., 255)
+        for arg in arguments {
+            self.visit_expr(arg)?; // Push arguments onto stack
         }
-
-        self.chunk.add_op(Op::Call(arg_count));
-
+        self.visit_expr(callee)?; // Push callee onto stack
+        self.emit_op(Op::Call(arg_count));
         Ok(())
     }
 
@@ -414,37 +489,42 @@ impl Visitor for Compiler {
     fn visit_declaration(&mut self, decl: Decl) -> Self::Value {
         match decl {
             Decl::Class(id, superclass, funcs) => {
-                self.visit_class_delcaration(id, superclass, funcs)
+                todo!("Class declaration compilation not implemented")
             }
             Decl::Func(name, parameters, body) => {
                 self.visit_func_declaration(name, parameters, body)
             }
-            Decl::Var(id, expr) => {
-                let _ = match expr {
-                    Some(expr) => self.visit_expr(expr)?,
-                    None => {
-                        self.chunk.add_op(Op::Nil);
-                    }
-                };
+            Decl::Var(id, initializer) => {
+                let global_name_index: Option<usize>;
 
-                let name = id.name;
+                // Declare variable (adds local or checks global)
+                self.declare_variable(&id.name)?;
 
-                if self.scope_depth() == 0 {
-                    let idx = self.chunk.add_const(name);
-                    self.chunk.add_op(Op::DefineGlobal(idx));
+                // Compile initializer or push Nil
+                if let Some(expr) = initializer {
+                    self.visit_expr(expr)?;
+                    // --- Semantic Check ---
+                    // If local, check if initializer references the var being declared
+                    // This requires resolving identifiers within the expression, which
+                    // might need a separate analysis pass or checks within visit_expr(Expr::Var).
+                    // For now, we skip this detailed check.
+                    // if self.current_context().scope_depth > 0 {
+                    //     if contains_reference(&expr, &id.name) { ... }
+                    // }
+                    // --- End Semantic Check ---
                 } else {
-                    if self.locals_count() == LOCALS_COUNT.into() {
-                        return Err(CompilerError::LocalVariableLimit);
-                    }
-
-                    if self.find_local(&name).is_some() {
-                        return Err(CompilerError::DuplicateVariableInScope(name));
-                    }
-
-                    let idx = self.add_local(name)?;
-                    self.chunk.add_op(Op::SetLocal(idx));
+                    self.emit_op(Op::Nil); // Default value if no initializer
                 }
 
+                // Get constant index for global name *after* potential initializer compilation
+                if self.current_context().scope_depth == 0 {
+                    global_name_index = Some(self.emit_const(id.name.clone())?);
+                } else {
+                    global_name_index = None;
+                }
+
+                // Define variable (marks local initialized or emits DefineGlobal)
+                self.define_variable(global_name_index)?;
                 Ok(())
             }
             Decl::Stmt(stmt) => self.visit_stmt(stmt),
@@ -464,27 +544,25 @@ impl Visitor for Compiler {
         match stmt {
             Stmt::Block(decls) => self.visit_block(decls),
             Stmt::Expr(expr) => {
-                let _ = self.visit_expr(expr)?;
-                self.chunk.add_op(Op::Pop);
-
+                self.visit_expr(expr)?;
+                self.emit_op(Op::Pop); // Pop result of expression statement
                 Ok(())
             }
             Stmt::Print(expr) => {
-                let _ = self.visit_expr(expr)?;
-                self.chunk.add_op(Op::Print);
-
+                self.visit_expr(expr)?;
+                self.emit_op(Op::Print);
                 Ok(())
             }
             Stmt::Return(expr) => self.visit_return_stmt(expr),
-            Stmt::If(cond, stmt, else_stmt) => {
-                self.visit_if_stmt(cond, *stmt, else_stmt.map(|v| *v))
+            Stmt::If(cond, then_branch, else_branch) => {
+                self.visit_if_stmt(cond, *then_branch, else_branch.map(|b| *b))
             }
             Stmt::While(cond, body) => self.visit_while_stmt(cond, *body),
         }
     }
 
     fn visit_block(&mut self, block: Vec<Decl>) -> Self::Value {
-        self.begin_scope()?;
+        self.begin_scope();
 
         for decl in block {
             self.visit_declaration(decl)?;
@@ -496,33 +574,66 @@ impl Visitor for Compiler {
     }
 
     fn visit_if_stmt(&mut self, cond: Expr, stmt: Stmt, else_stmt: Option<Stmt>) -> Self::Value {
-        let _ = self.visit_expr(cond)?;
+        // Compile condition
+        self.visit_expr(cond)?;
+
+        // Emit jump placeholder to skip 'then' if condition is false
+        let then_jump = self.emit_jump(Op::JumpIfFalse(0)); // Jump to 'else' or after 'if'
+
+        // Pop condition value if it was true (before executing 'then')
+        self.emit_op(Op::Pop);
+        // Compile 'then' branch
+        self.visit_stmt(stmt)?;
 
         if let Some(else_stmt) = else_stmt {
-            self.jump_around(JumpType::JumpIfFalseWithExtraOffset, |compiler| {
-                compiler.visit_stmt(stmt)
-            })?;
+            // *** FIX 4: Correct if/else jump logic ***
+            // Emit unconditional jump to skip 'else' after 'then' executes
+            let else_jump = self.emit_jump(Op::Jump(0)); // Jump over 'else'
 
-            self.jump_around(JumpType::Jump, |compiler| compiler.visit_stmt(else_stmt))?;
+            // Patch the initial JumpIfFalse to land here (start of 'else')
+            self.patch_jump(then_jump)?;
+
+            // Pop condition value if it was false (before executing 'else')
+            self.emit_op(Op::Pop);
+            // Compile 'else' branch
+            self.visit_stmt(else_stmt)?;
+
+            // Patch the unconditional jump to land here (after 'else')
+            self.patch_jump(else_jump)?;
         } else {
-            self.jump_around(JumpType::JumpIfFalse, |compiler| compiler.visit_stmt(stmt))?;
+            // No 'else' branch
+            // Patch the initial JumpIfFalse to land here (after 'then')
+            self.patch_jump(then_jump)?;
+            // Pop condition value if it was false (since there's no 'else' to execute)
+            // Note: If the condition was true, the Pop *after* JumpIfFalse already handled it.
+            // This Pop handles the case where the condition was false and we jumped.
+            self.emit_op(Op::Pop);
         }
 
         Ok(())
     }
 
     fn visit_while_stmt(&mut self, cond: Expr, body: Stmt) -> Self::Value {
-        let loop_start = self.chunk.code_len();
+        let loop_start = self.current_chunk_mut().code_len(); // Mark start of loop (condition)
 
-        let _ = self.visit_expr(cond)?;
+        // Compile condition
+        self.visit_expr(cond)?;
 
-        self.jump_around(JumpType::JumpIfFalseWithExtraOffset, |compiler| {
-            compiler.visit_stmt(body)
-        })?;
+        // Jump out of loop if condition is false
+        let exit_jump = self.emit_jump(Op::JumpIfFalse(0)); // Placeholder
 
-        let offset = self.chunk.code_len() - loop_start + 1;
-        self.chunk.add_op(Op::Loop(offset));
-        self.chunk.add_op(Op::Pop);
+        // Pop condition value if true (before executing body)
+        self.emit_op(Op::Pop);
+        // Compile loop body
+        self.visit_stmt(body)?;
+
+        // Emit loop instruction to jump back to condition
+        self.emit_loop(loop_start)?;
+
+        // Patch exit jump to land here (after the loop)
+        self.patch_jump(exit_jump)?;
+        // Pop condition value if it was false (when exiting loop)
+        self.emit_op(Op::Pop);
 
         Ok(())
     }
@@ -533,61 +644,69 @@ impl Visitor for Compiler {
         parameters: Vec<Identifier>,
         body: Stmt,
     ) -> Self::Value {
-        let name = name.name.clone();
         let arity = parameters.len();
+        let name = name.name;
+        // TODO: Check arity limit (e.g., 255)
 
-        self.begin_context();
+        // Start a new compilation context for the function
+        self.begin_function_context(Some(name.clone()), arity);
 
-        let errors = parameters
-            .iter()
-            .map(|var| {
-                self.context
-                    .last_mut()
-                    .map(|ctx| {
-                        ctx.locals.push(Local {
-                            name: var.name.clone(),
-                            depth: ctx.scope_depth + 1,
-                            initialized: false,
-                        })
-                    })
-                    .ok_or(CompilerError::NoContextFound)
-            })
-            .filter(|r| r.is_err())
-            .collect::<Vec<Result<(), CompilerError>>>();
-
-        if !errors.is_empty() {
-            return errors.first().cloned().unwrap();
+        // Compile parameters (declare them as locals in the function's scope)
+        // Note: Parameters are implicitly initialized.
+        self.begin_scope(); // Function body starts a new scope implicitly
+        for param in parameters {
+            self.declare_variable(&param.name)?;
+            // Parameters are defined immediately (no initializer to compile)
+            self.mark_last_local_initialized();
         }
 
-        let mut fn_chunk = Chunk::new();
+        // Compile the function body
+        self.visit_stmt(body)?;
 
-        std::mem::swap(&mut self.chunk, &mut fn_chunk);
+        // End the implicit scope for parameters/body
+        // Note: end_scope emits Pops for locals, but return truncates stack anyway.
+        // Still good practice to emit them.
+        self.end_scope()?;
 
-        let _ = self.visit_stmt(body)?;
+        // *** FIX 5: Implicit Return handled by end_function_context ***
+        // Finish the function context (adds implicit return, pops context)
+        let compiled_function = self.end_function_context()?;
 
-        std::mem::swap(&mut self.chunk, &mut fn_chunk);
+        // --- Back in the outer context ---
 
-        self.end_context();
+        // Add the compiled function object as a constant in the outer chunk
+        let const_index = self.emit_const(compiled_function)?;
 
-        let new_fn = Function::new_named(name.clone(), fn_chunk, arity);
+        // Emit Op::Closure to create the runtime closure object
+        println!("emitting closure");
+        self.emit_op(Op::Closure(const_index));
 
-        let idx = self.chunk.add_const(new_fn);
-        self.chunk.add_op(Op::Closure(idx));
-        let idx = self.chunk.add_const(name);
-        self.chunk.add_op(Op::DefineGlobal(idx));
+        // Define the variable (global or local) holding the closure
+        // Need the name as a constant if global
+        let global_name_index = if self.current_context().scope_depth == 0 {
+            Some(self.emit_const(name.clone())?)
+        } else {
+            // If declared local, define_variable will mark it initialized
+            None
+        };
+        // Define the variable (global or local) that holds the closure
+        self.declare_variable(&name)?; // Declare in outer scope
+        self.define_variable(global_name_index)?; // Define (marks local init or emits DefineGlobal)
 
         Ok(())
     }
 
     fn visit_return_stmt(&mut self, expr: Option<Expr>) -> Self::Value {
-        if let Some(expr) = expr {
-            let _ = self.visit_expr(expr)?;
+        // if self.current_context().function_type == FunctionType::Script {
+        //     return Err(CompilerError::ReturnFromTopLevel);
+        // }
+
+        if let Some(e) = expr {
+            self.visit_expr(e)?; // Evaluate return value
         } else {
-            self.chunk.add_op(Op::Nil);
+            self.emit_op(Op::Nil); // Implicit nil return value
         }
-
-        self.chunk.add_op(Op::Return);
-
+        self.emit_op(Op::Return);
         Ok(())
     }
 }
@@ -608,7 +727,7 @@ mod test {
 
         let result = Compiler::new_from_source(input).unwrap().compile().unwrap();
 
-        assert_eq!(result.disassemble(), expected.disassemble());
+        assert_eq!(result.chunk().disassemble(), expected.disassemble());
     }
 
     #[test]
@@ -621,7 +740,7 @@ mod test {
 
         let result = Compiler::new_from_source(input).unwrap().compile().unwrap();
 
-        assert_eq!(result.disassemble(), expected.disassemble());
+        assert_eq!(result.chunk().disassemble(), expected.disassemble());
     }
 
     #[test]
@@ -635,7 +754,7 @@ mod test {
 
         let result = Compiler::new_from_source(input).unwrap().compile().unwrap();
 
-        assert_eq!(result.disassemble(), expected.disassemble());
+        assert_eq!(result.chunk().disassemble(), expected.disassemble());
     }
 
     #[test]
@@ -652,7 +771,7 @@ mod test {
 
         let result = Compiler::new_from_source(input).unwrap().compile().unwrap();
 
-        assert_eq!(result.disassemble(), expected.disassemble());
+        assert_eq!(result.chunk().disassemble(), expected.disassemble());
     }
 
     #[test]
@@ -669,7 +788,7 @@ mod test {
 
         let result = Compiler::new_from_source(input).unwrap().compile().unwrap();
 
-        assert_eq!(result.disassemble(), expected.disassemble());
+        assert_eq!(result.chunk().disassemble(), expected.disassemble());
     }
 
     #[test]
@@ -686,7 +805,7 @@ mod test {
 
         let result = Compiler::new_from_source(input).unwrap().compile().unwrap();
 
-        assert_eq!(result.disassemble(), expected.disassemble());
+        assert_eq!(result.chunk().disassemble(), expected.disassemble());
     }
 
     #[test]
@@ -703,7 +822,7 @@ mod test {
 
         let result = Compiler::new_from_source(input).unwrap().compile().unwrap();
 
-        assert_eq!(result.disassemble(), expected.disassemble());
+        assert_eq!(result.chunk().disassemble(), expected.disassemble());
     }
 
     #[test]
@@ -717,6 +836,6 @@ mod test {
 
         let result = Compiler::new_from_source(input).unwrap().compile().unwrap();
 
-        assert_eq!(result.disassemble(), expected.disassemble());
+        assert_eq!(result.chunk().disassemble(), expected.disassemble());
     }
 }

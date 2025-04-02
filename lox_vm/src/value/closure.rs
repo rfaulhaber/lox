@@ -1,6 +1,5 @@
 use std::rc::Rc;
 
-use crate::bytecode::Chunk;
 
 use super::{Function, Upvalue};
 
@@ -18,9 +17,9 @@ impl Closure {
         }
     }
 
-    pub fn new_top_level(chunk: Chunk) -> Self {
+    pub fn new_top_level(function: Function) -> Self {
         Self {
-            func: Rc::new(Function::new_top_level(chunk)),
+            func: Rc::new(function),
             upvalues: Vec::new(),
         }
     }

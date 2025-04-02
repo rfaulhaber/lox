@@ -98,6 +98,10 @@ impl Chunk {
         self.code.insert(index, op);
     }
 
+    pub fn code_mut(&mut self) -> &mut Vec<Op> {
+        &mut self.code
+    }
+
     pub fn disassemble(&self) -> Vec<String> {
         let mut main_body: Vec<String> = self
             .code
