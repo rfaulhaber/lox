@@ -1,9 +1,8 @@
 ---
 source: tests/golden.rs
-assertion_line: 33
 expression: run_test(path)
 input_file: tests/fixtures/scope_update.lox
 ---
 '''
-"world"
+world
 '''

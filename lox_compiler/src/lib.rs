@@ -83,12 +83,13 @@ impl<'c> Context {
     }
 
     /// Returns a reference to a local named `name` declared *strictly within* the current innermost scope.
-    pub fn find_local_in_current_scope(&self, name: &str) -> Option<&Local> {
+    pub fn find_local_in_current_scope(&self, name: &str) -> Option<(usize, &Local)> {
         // Search backwards only through locals at the current depth
         self.locals
             .iter()
+            .enumerate()
             .rev()
-            .find(|local| local.name == name && local.depth == self.scope_depth)
+            .find(|(_, local)| local.name == name && local.depth == self.scope_depth)
     }
 }
 
@@ -162,8 +163,19 @@ impl<'c> Compiler {
     }
 
     fn end_function_context(&mut self) -> Result<Function, CompilerError> {
-        self.current_chunk_mut().add_op(Op::Return);
+        let last_is_return = self
+            .current_chunk()
+            .code()
+            .last()
+            .map(|op| matches!(op, Op::Return))
+            .unwrap();
 
+        if !last_is_return {
+            self.current_chunk_mut().add_op(Op::Nil);
+            self.current_chunk_mut().add_op(Op::Return);
+        }
+
+        // TODO error handling
         let finished_function = self.context.pop().unwrap().function;
 
         Ok(finished_function)
@@ -177,6 +189,11 @@ impl<'c> Compiler {
     #[inline]
     fn current_context_mut(&mut self) -> &mut Context {
         self.context.last_mut().expect("Context stack empty")
+    }
+
+    #[inline]
+    fn current_chunk(&self) -> &Chunk {
+        self.current_context().function.chunk()
     }
 
     #[inline]
@@ -209,7 +226,9 @@ impl<'c> Compiler {
             depth: self.current_context().scope_depth,
             initialized: false, // Mark as uninitialized initially
         };
+
         self.current_context_mut().locals.push(local);
+
         Ok(())
     }
 
@@ -240,6 +259,7 @@ impl<'c> Compiler {
         if let Some((index, local)) = self.current_context().lookup_local(id_name) {
             // Check if accessing uninitialized local in its own initializer (semantic check)
             if !local.initialized {
+                println!("local not initialized {:?}", local);
                 // This check should ideally happen *during* initializer compilation
                 // return Err(CompilerError::VariableUsedInInitializer(id_name.clone()));
                 // For now, we allow it but the VM might read garbage if set isn't emitted first.
@@ -259,7 +279,8 @@ impl<'c> Compiler {
     fn mark_last_local_initialized(&mut self) {
         if self.current_context().scope_depth == 0 {
             return;
-        } // Not applicable to globals
+        }
+
         self.current_context_mut()
             .locals
             .last_mut()
@@ -343,12 +364,7 @@ impl<'c> Compiler {
 
     /// Emits Nil and Return. Should be called at the end of function compilation.
     fn emit_return(&mut self) -> Result<(), CompilerError> {
-        // TODO: If implementing initializers, return `this` (local slot 0) instead of nil.
-        // if self.current_context().function_type == FunctionType::Initializer {
-        //    self.emit_op(Op::GetLocal(0)); // Get 'this'
-        // } else {
         self.emit_op(Op::Nil);
-        // }
         self.emit_op(Op::Return);
         Ok(())
     }
@@ -501,7 +517,7 @@ impl Visitor for Compiler {
                 self.declare_variable(&id.name)?;
 
                 // Compile initializer or push Nil
-                if let Some(expr) = initializer {
+                if let Some(expr) = initializer.clone() {
                     self.visit_expr(expr)?;
                     // --- Semantic Check ---
                     // If local, check if initializer references the var being declared
@@ -645,15 +661,15 @@ impl Visitor for Compiler {
         body: Stmt,
     ) -> Self::Value {
         let arity = parameters.len();
-        let name = name.name;
         // TODO: Check arity limit (e.g., 255)
 
         // Start a new compilation context for the function
-        self.begin_function_context(Some(name.clone()), arity);
+        self.begin_function_context(Some(name.name.clone()), arity);
 
         // Compile parameters (declare them as locals in the function's scope)
         // Note: Parameters are implicitly initialized.
         self.begin_scope(); // Function body starts a new scope implicitly
+
         for param in parameters {
             self.declare_variable(&param.name)?;
             // Parameters are defined immediately (no initializer to compile)
@@ -666,7 +682,7 @@ impl Visitor for Compiler {
         // End the implicit scope for parameters/body
         // Note: end_scope emits Pops for locals, but return truncates stack anyway.
         // Still good practice to emit them.
-        self.end_scope()?;
+        // self.end_scope()?;
 
         // *** FIX 5: Implicit Return handled by end_function_context ***
         // Finish the function context (adds implicit return, pops context)
@@ -678,35 +694,35 @@ impl Visitor for Compiler {
         let const_index = self.emit_const(compiled_function)?;
 
         // Emit Op::Closure to create the runtime closure object
-        println!("emitting closure");
         self.emit_op(Op::Closure(const_index));
 
         // Define the variable (global or local) holding the closure
         // Need the name as a constant if global
         let global_name_index = if self.current_context().scope_depth == 0 {
-            Some(self.emit_const(name.clone())?)
+            Some(self.emit_const(name.name.clone())?)
         } else {
             // If declared local, define_variable will mark it initialized
             None
         };
         // Define the variable (global or local) that holds the closure
-        self.declare_variable(&name)?; // Declare in outer scope
+        self.declare_variable(&name.name)?; // Declare in outer scope
         self.define_variable(global_name_index)?; // Define (marks local init or emits DefineGlobal)
 
         Ok(())
     }
 
     fn visit_return_stmt(&mut self, expr: Option<Expr>) -> Self::Value {
-        // if self.current_context().function_type == FunctionType::Script {
-        //     return Err(CompilerError::ReturnFromTopLevel);
-        // }
-
-        if let Some(e) = expr {
-            self.visit_expr(e)?; // Evaluate return value
-        } else {
-            self.emit_op(Op::Nil); // Implicit nil return value
+        match expr {
+            Some(e) => {
+                self.visit_expr(e)?;
+            }
+            None => {
+                self.emit_op(Op::Nil); // Implicit nil return value
+            }
         }
+
         self.emit_op(Op::Return);
+
         Ok(())
     }
 }

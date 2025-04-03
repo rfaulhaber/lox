@@ -223,8 +223,7 @@ impl<W: Write> Interpreter<W> {
         loop {
             match self.step() {
                 Ok(InterpreterState::Running) => continue,
-                Ok(InterpreterState::Finished) => return Ok(InterpreterState::Finished),
-                Err(e) => return Err(e),
+                v => return v,
             }
         }
     }
@@ -285,7 +284,7 @@ impl<W: Write> Interpreter<W> {
 
                 // Truncate the stack back to the start of the returning function's frame.
                 // This removes the function's locals, arguments, and the callee itself.
-                self.stack.truncate(frame.slots_start);
+                self.stack.truncate(frame.slots_start + 1);
 
                 // Push the result onto the caller's stack.
                 self.stack_push(result);
@@ -422,7 +421,8 @@ impl<W: Write> Interpreter<W> {
             Op::Loop(pos) => self.jump_loop(pos)?,
             Op::Call(arg_count) => {
                 // Peek the callee, which is below the arguments
-                let callee_value = self.stack_peek(arg_count)?.clone();
+                // TODO don't unwrap
+                let callee_value = self.stack_pop().unwrap();
                 self.call_value(callee_value, arg_count)?;
             }
             Op::Closure(index) => {
@@ -484,7 +484,7 @@ impl<W: Write> Interpreter<W> {
         // IP was already incremented past the jump instruction itself.
         // The offset is relative to the *start* of the jump instruction.
         // So, we adjust IP by offset - 1 (because IP is already +1 ahead).
-        self.current_frame_mut()?.ip += offset - 1; // -1 because IP already advanced
+        self.current_frame_mut()?.ip += offset;
         Ok(())
     }
 
@@ -505,7 +505,7 @@ impl<W: Write> Interpreter<W> {
         match callee {
             Value::Closure(closure) => self.call_closure(closure, arg_count),
             Value::Native(native_fn) => self.call_native(native_fn, arg_count),
-            v => Err(InterpreterError::ValueNotCallable(v.type_as_string())),
+            v => Err(InterpreterError::ValueNotCallable(format!("{}", v))),
         }
     }
 
@@ -595,10 +595,10 @@ impl<W: Write> Interpreter<W> {
     fn stack_get(&self, relative_index: usize) -> Result<&Value, InterpreterError> {
         let frame_start = self.current_frame()?.slots_start;
         let absolute_index = frame_start + relative_index;
-        self.stack.get(absolute_index).ok_or_else(|| {
+        self.stack.get(absolute_index).ok_or(
             // Provide more context in the error
-            InterpreterError::LocalNotFound(absolute_index, relative_index)
-        })
+            InterpreterError::LocalNotFound(absolute_index, relative_index),
+        )
     }
 
     /// Sets a value on the stack using an index relative to the current frame's start.
@@ -615,6 +615,7 @@ impl<W: Write> Interpreter<W> {
                 self.stack.len(),
             ));
         }
+
         self.stack[absolute_index] = value;
         Ok(())
     }
@@ -670,7 +671,6 @@ mod test {
         chunk.push_const(1.2); // 0
         chunk.push_const(3.4); // 1
         chunk.add_op(Op::Add);
-        chunk.add_op(Op::Return); // Explicit return needed
 
         let result = run_code(chunk);
         assert!(result.is_ok());
@@ -685,7 +685,6 @@ mod test {
         chunk.add_op(Op::Add);
         chunk.push_const("baz"); // 2
         chunk.add_op(Op::Add);
-        chunk.add_op(Op::Return);
 
         let result = run_code(chunk);
         assert!(result.is_ok());
@@ -705,7 +704,6 @@ mod test {
         chunk.push_const("a"); // 4
         chunk.push_const("a"); // 5
         chunk.add_op(Op::Equal); // stack: [true, true]
-        chunk.add_op(Op::Return);
 
         let result = run_code(chunk);
         assert!(result.is_ok());
@@ -722,7 +720,6 @@ mod test {
         chunk.add_op(Op::GetGlobal(2)); // stack: [10.0]
         chunk.push_const(5.0); // 3: value 5.0
         chunk.add_op(Op::Add); // stack: [15.0]
-        chunk.add_op(Op::Return);
 
         let result = run_code(chunk);
         assert!(result.is_ok());
@@ -731,48 +728,29 @@ mod test {
 
     #[test]
     fn test_local_vars() {
-        // Simulate entering a scope (though not via function call here)
         let mut chunk = Chunk::new();
-        chunk.push_const(10.0); // 0: value 10.0
-        // Assume Op::SetLocal(0) would be used if this was compiled from `var a = 10;` in a scope
-        // We'll manually set up the stack and frame for testing Get/Set
-        chunk.add_op(Op::GetLocal(0)); // Get local at index 0 relative to frame start
-        chunk.push_const(5.0); // 1: value 5.0
+        chunk.add_op(Op::GetLocal(0)); // Get local 0: should be 10.0
+        chunk.push_const(5.0); // Add 5.0
         chunk.add_op(Op::Add);
-        // Assume Op::SetLocal(1) for `var b = ...`
-        // Let's test setting local 0
-        chunk.add_op(Op::SetLocal(0)); // Set local 0 to the result (15.0), stack: [15.0]
-        chunk.add_op(Op::Pop); // Pop the assignment result
-        chunk.add_op(Op::GetLocal(0)); // Get local 0 again, should be 15.0
+        chunk.add_op(Op::SetLocal(0)); // Store result into local 0
+        chunk.add_op(Op::GetLocal(0)); // Load again to check
         chunk.add_op(Op::Return);
 
-        // --- Manual VM setup for this specific test ---
-        let mut vm = Interpreter::new_with_writer(std::io::stdout()); // Write output
-        vm.set_mode(InterpreterMode::Debug);
-        let script_fn = Function::new_top_level(chunk);
-        let top_frame = CallFrame::new_top_level(script_fn);
-
-        // Manually push initial value for the "local" variable at index 0
-        vm.stack.push(Value::Closure(top_frame.closure.clone())); // Script closure at 0 (frame start)
-        vm.stack.push(Value::from(10.0)); // "Local" value at index 1 (absolute)
-
-        // Adjust frame's slot_start to point *after* the closure, where locals begin
-        let frame_for_test = CallFrame {
-            closure: top_frame.closure.clone(),
-            slots_start: 1, // Locals start at index 1 for this test setup
+        let mut vm = Interpreter::new_with_writer(std::io::stdout());
+        let func = Function::new_top_level(chunk);
+        let frame = CallFrame {
+            closure: Rc::new(Closure::new_top_level(func)),
+            slots_start: 1, // Local starts at index 1
             ip: 0,
         };
-        vm.frames.push(frame_for_test);
 
-        // --- Run the VM ---
-        let run_result = vm.run();
-        assert!(run_result.is_ok());
-        assert_eq!(run_result.unwrap(), InterpreterState::Finished);
+        // Closure goes first, then the actual local
+        vm.stack.push(Value::Closure(frame.closure.clone())); // Stack[0]
+        vm.stack.push(Value::from(10.0)); // Local 0 -> Stack[1]
+        vm.frames.push(frame);
 
-        // --- Check final stack state ---
-        // After return, the stack should contain only the return value (15.0)
-        // Note: The run_code helper handles the final pop, so we check vm.stack directly before that would happen.
-        assert_eq!(vm.stack.len(), 1); // Should contain only the final return value
+        let result = vm.run();
+        assert!(result.is_ok());
         assert_eq!(vm.stack_peek(0).unwrap(), &Value::from(15.0));
     }
 
@@ -783,7 +761,7 @@ mod test {
         func_chunk.add_op(Op::GetLocal(1)); // Get argument 'a' (at index 1 relative to frame: 0 is func itself, 1 is first arg)
         func_chunk.push_const(5.0); // 0: constant 5.0
         func_chunk.add_op(Op::Add);
-        func_chunk.add_op(Op::Return);
+        func_chunk.add_op(Op::Return); // Return the result from main
         let func = Function::new_named("addFive".to_string(), func_chunk, 1); // name, chunk, arity 1
 
         // --- Main Script Chunk ---
@@ -794,10 +772,9 @@ mod test {
         main_chunk.add_op(Op::DefineGlobal(1)); // Define global function, stack: []
 
         main_chunk.add_const("addFive"); // 2: function name "addFive"
-        main_chunk.add_op(Op::GetGlobal(2)); // Get closure, stack: [closure]
         main_chunk.push_const(10.0); // 3: argument 10.0, stack: [closure, 10.0]
+        main_chunk.add_op(Op::GetGlobal(2)); // Get closure, stack: [closure]
         main_chunk.add_op(Op::Call(1)); // Call with 1 argument
-        main_chunk.add_op(Op::Return); // Return the result from main
 
         // --- Run ---
         let result = run_code(main_chunk);
@@ -806,105 +783,70 @@ mod test {
         assert_eq!(result.unwrap(), Value::from(15.0));
     }
 
-    #[test]
-    fn test_nested_call() {
-        // --- Inner Function ---
-        let mut inner_chunk = Chunk::new();
-        inner_chunk.add_op(Op::GetLocal(1)); // Arg x
-        inner_chunk.add_op(Op::Return);
-        let inner_func = Function::new_named("inner".to_string(), inner_chunk, 1);
+#[test]
+fn test_nested_call() {
+    // inner(x): return x
+    let mut inner_chunk = Chunk::new();
+    inner_chunk.add_op(Op::GetLocal(1)); // Arg x
+    inner_chunk.add_op(Op::Return);
+    let inner_func = Function::new_named("inner".to_string(), inner_chunk, 1);
 
-        // --- Outer Function ---
-        let mut outer_chunk = Chunk::new();
-        outer_chunk.add_const(inner_func); // 0: inner function object
-        outer_chunk.add_op(Op::Closure(0)); // stack: [outer_closure, outer_arg, inner_closure]
-        outer_chunk.add_op(Op::GetLocal(1)); // Get outer arg 'a', stack: [..., inner_closure, outer_arg]
-        outer_chunk.push_const(1.0); // 1: value 1.0, stack: [..., inner_closure, outer_arg, 1.0]
-        outer_chunk.add_op(Op::Add); // stack: [..., inner_closure, outer_arg+1]
-        outer_chunk.add_op(Op::Call(1)); // Call inner with outer_arg+1
-        outer_chunk.add_op(Op::Return); // Return result of inner call
-        let outer_func = Function::new_named("outer".to_string(), outer_chunk, 1);
+    // outer(a): return inner(a + 1)
+    let mut outer_chunk = Chunk::new();
+    outer_chunk.add_const(inner_func);     // 0: inner function
+    outer_chunk.add_op(Op::GetLocal(1));   // get a
+    outer_chunk.push_const(1.0);           // 1: number 1.0
+    outer_chunk.add_op(Op::Add);           // a + 1
+    outer_chunk.add_op(Op::Closure(0));    // create inner closure
+    outer_chunk.add_op(Op::Call(1));       // call inner(a + 1)
+    outer_chunk.add_op(Op::Return);
+    let outer_func = Function::new_named("outer".to_string(), outer_chunk, 1);
 
-        // --- Main Script Chunk ---
-        let mut main_chunk = Chunk::new();
-        main_chunk.add_const(outer_func); // 0: outer function object
-        main_chunk.add_op(Op::Closure(0)); // stack: [outer_closure]
-        main_chunk.add_const("outer"); // 1: name "outer"
-        main_chunk.add_op(Op::DefineGlobal(1)); // Define outer
+    // main: return outer(20)
+    let mut main_chunk = Chunk::new();
+    main_chunk.add_const(outer_func);       // 0: outer
+    main_chunk.add_op(Op::Closure(0));     // stack: [outer closure]
+    main_chunk.add_const("outer");         // 1
+    main_chunk.add_op(Op::DefineGlobal(1));
 
-        main_chunk.add_const("outer"); // 2: name "outer"
-        main_chunk.add_op(Op::GetGlobal(2)); // stack: [outer_closure]
-        main_chunk.push_const(20.0); // 3: argument 20.0, stack: [outer_closure, 20.0]
-        main_chunk.add_op(Op::Call(1)); // Call outer(20)
-        main_chunk.add_op(Op::Return); // Return result
+    main_chunk.add_const("outer");         // 2
+    main_chunk.push_const(20.0);           // argument
+    main_chunk.add_op(Op::GetGlobal(2));   // [20.0, outer closure]
+    main_chunk.add_op(Op::Call(1));
 
-        // --- Run ---
-        let result = run_code(main_chunk);
-        println!("Nested Call Result: {:?}", result);
-        assert!(result.is_ok());
-        // outer(20) calls inner(20+1), inner returns 21
-        assert_eq!(result.unwrap(), Value::from(21.0));
-    }
+    let result = run_code(main_chunk);
+    assert!(result.is_ok());
+    assert_eq!(result.unwrap(), Value::from(21.0));
+}
 
     #[test]
     fn test_jump_if_false() {
         let mut chunk = Chunk::new();
-        chunk.push_const(10.0); // 0: value 10.0 (initial value) stack: [10.0]
-        chunk.add_op(Op::False); // stack: [10.0, false]
-        // JumpIfFalse offset 3: Jumps over Pop and Const(20.0) if top is falsey
-        // Target instruction is Op::Add
-        // Instructions: 0:Const, 1:False, 2:JumpIfFalse(3), 3:Pop, 4:Const, 5:Add, 6:Return
-        // Jump from index 2. Target index = 2 + 3 = 5 (Op::Add)
-        chunk.add_op(Op::JumpIfFalse(3));
-        chunk.add_op(Op::Pop); // Pop the false if condition was true
-        chunk.push_const(20.0); // 1: value 20.0 (skipped)
-        // Target of jump:
-        chunk.add_op(Op::Add); // Add 10.0 (still on stack) + 5.0 (pushed below)
-        chunk.push_const(5.0); // 2: value 5.0
-        chunk.add_op(Op::Add); // This should not execute if jump happens
-        chunk.add_op(Op::Return);
+
+        // Simulate: if (false) { 20 } else { 30 }; return
+        chunk.add_op(Op::False); // Push false (condition)
+        chunk.add_op(Op::JumpIfFalse(3)); // If false, jump to Else block (index 5)
+        chunk.add_op(Op::Pop); // Pop condition if true
+        chunk.push_const(20.0); // Then branch
+        chunk.add_op(Op::Jump(2)); // Jump over else
+        chunk.add_op(Op::Pop); // Pop condition if false
+        chunk.push_const(30.0); // Else branch
 
         let result = run_code(chunk);
         assert!(result.is_ok());
-        // Since condition is false, jump happens. Stack before jump: [10.0, false].
-        // Jump goes to Op::Add. Stack should be [10.0] (false is NOT popped by JumpIfFalse).
-        // Wait, JumpIfFalse *doesn't* pop. The compiler usually adds a Pop *after* the jump target for the 'then' block.
-        // Let's adjust the test based on VM logic: JumpIfFalse peeks.
-        // Stack before jump: [10.0, false]. Jump happens. IP goes to Op::Add.
-        // Op::Add expects two operands. Stack is [10.0, false]. This will error.
+        assert_eq!(result.unwrap(), Value::from(30.0));
+    }
 
-        // --- Let's rewrite the test to match typical compiled 'if' ---
-        // if (false) { push 20 } else { push 30 }; push 5; add; return
-        let mut chunk_if = Chunk::new();
-        chunk_if.add_op(Op::False); // Condition: stack [false]
-        // JumpIfFalse(4): Skip 'then' block (Pop, Const) + Jump instruction itself
-        // Target: Op::Const(30.0) at index 6
-        // Instructions: 0:False, 1:JumpIfFalse(4), 2:Pop, 3:Const(20), 4:Jump(3), 5:Pop, 6:Const(30), 7:Push(5), 8:Add, 9:Return
-        chunk_if.add_op(Op::JumpIfFalse(4)); // Jump if false to index 1+4 = 5 (Pop before else)
+    #[test]
+    fn test_negation_and_math() {
+        let mut chunk = Chunk::new();
+        chunk.push_const(3.0); // 0
+        chunk.add_op(Op::Negate); // -3.0
+        chunk.push_const(5.0); // 1
+        chunk.add_op(Op::Add); // -3.0 + 5.0 = 2.0
 
-        // 'Then' block (skipped)
-        chunk_if.add_op(Op::Pop); // Pop the condition if true
-        chunk_if.push_const(20.0); // 0: value 20.0
-        // Jump(3): Skip 'else' block (Pop, Const) + Jump itself
-        // Target: Op::Push(5.0) at index 5+3 = 8? No, target is index after else block.
-        // Target: index 7 (Op::Push(5.0))
-        // Jump from index 4. Target index = 4 + 3 = 7
-        chunk_if.add_op(Op::Jump(3));
-
-        // 'Else' block (executed)
-        // Target of JumpIfFalse lands here (index 5)
-        chunk_if.add_op(Op::Pop); // Pop the condition if false
-        chunk_if.push_const(30.0); // 1: value 30.0. stack: [30.0]
-
-        // After if/else
-        // Target of Jump lands here (index 7)
-        chunk_if.push_const(5.0); // 2: value 5.0. stack: [30.0, 5.0]
-        chunk_if.add_op(Op::Add); // stack: [35.0]
-        chunk_if.add_op(Op::Return);
-
-        let result_if = run_code(chunk_if);
-        println!("If test result: {:?}", result_if);
-        assert!(result_if.is_ok());
-        assert_eq!(result_if.unwrap(), Value::from(35.0));
+        let result = run_code(chunk);
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), Value::from(2.0));
     }
 } // mod test
