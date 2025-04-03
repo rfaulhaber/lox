@@ -188,7 +188,6 @@ impl<W: Write> Interpreter<W> {
             return Err(InterpreterError::StackOverflow); // Use specific error
         }
 
-        // *** FIX 1: Correct slots_start calculation ***
         // The new frame's stack base starts where the callee (function/closure) is located.
         // Stack layout before call: [... stack_base ..., callee, arg1, ..., argN]
         // The callee is at index: self.stack.len() - 1 - arg_count

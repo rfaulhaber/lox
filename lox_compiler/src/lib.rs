@@ -10,8 +10,11 @@ use lox_source::{
     },
     parser::{ParseError, Parser},
 };
-use lox_vm::bytecode::{Chunk, Op};
 use lox_vm::value::{Function, Value};
+use lox_vm::{
+    bytecode::{Chunk, Op},
+    value::Upvalue,
+};
 use thiserror::Error;
 
 #[derive(Debug, Clone, Error)]
@@ -461,7 +464,6 @@ impl Visitor for Compiler {
                 self.patch_jump(end_jump)?;
             }
             LogicalOperator::Or => {
-                // *** FIX 3: Correct logical 'or' compilation ***
                 // Compile LHS
                 self.visit_expr(left)?;
                 // If LHS is falsey, jump to RHS evaluation
@@ -602,7 +604,6 @@ impl Visitor for Compiler {
         self.visit_stmt(stmt)?;
 
         if let Some(else_stmt) = else_stmt {
-            // *** FIX 4: Correct if/else jump logic ***
             // Emit unconditional jump to skip 'else' after 'then' executes
             let else_jump = self.emit_jump(Op::Jump(0)); // Jump over 'else'
 
@@ -666,26 +667,16 @@ impl Visitor for Compiler {
         // Start a new compilation context for the function
         self.begin_function_context(Some(name.name.clone()), arity);
 
-        // Compile parameters (declare them as locals in the function's scope)
-        // Note: Parameters are implicitly initialized.
         self.begin_scope(); // Function body starts a new scope implicitly
 
         for param in parameters {
             self.declare_variable(&param.name)?;
-            // Parameters are defined immediately (no initializer to compile)
             self.mark_last_local_initialized();
         }
 
         // Compile the function body
         self.visit_stmt(body)?;
 
-        // End the implicit scope for parameters/body
-        // Note: end_scope emits Pops for locals, but return truncates stack anyway.
-        // Still good practice to emit them.
-        // self.end_scope()?;
-
-        // *** FIX 5: Implicit Return handled by end_function_context ***
-        // Finish the function context (adds implicit return, pops context)
         let compiled_function = self.end_function_context()?;
 
         // --- Back in the outer context ---
@@ -713,13 +704,9 @@ impl Visitor for Compiler {
 
     fn visit_return_stmt(&mut self, expr: Option<Expr>) -> Self::Value {
         match expr {
-            Some(e) => {
-                self.visit_expr(e)?;
-            }
-            None => {
-                self.emit_op(Op::Nil); // Implicit nil return value
-            }
-        }
+            Some(e) => self.visit_expr(e)?,
+            None => self.emit_op(Op::Nil), // Implicit nil return value
+        };
 
         self.emit_op(Op::Return);
 
