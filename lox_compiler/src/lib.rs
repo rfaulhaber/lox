@@ -40,10 +40,17 @@ pub struct Local {
     initialized: bool,
 }
 
+#[derive(Debug, Clone, PartialEq)]
+pub struct UpvalueRecord {
+    index: usize,
+    local: bool,
+}
+
 #[derive(Debug)]
 pub struct Context {
     function: Function,
     locals: Vec<Local>,
+    upvalues: Vec<UpvalueRecord>,
     scope_depth: usize,
 }
 
@@ -63,6 +70,7 @@ impl<'c> Context {
                 None => Function::new_anonymous(Chunk::new(), arity),
             },
             locals,
+            upvalues: Vec::new(),
             scope_depth: 0,
         }
     }
@@ -165,7 +173,7 @@ impl<'c> Compiler {
         self.context.push(Context::new(name, arity));
     }
 
-    fn end_function_context(&mut self) -> Result<Function, CompilerError> {
+    fn end_function_context(&mut self) -> Result<(Vec<UpvalueRecord>, Function), CompilerError> {
         let last_is_return = self
             .current_chunk()
             .code()
@@ -179,9 +187,12 @@ impl<'c> Compiler {
         }
 
         // TODO error handling
-        let finished_function = self.context.pop().unwrap().function;
+        let finished_ctx = self.context.pop().unwrap();
 
-        Ok(finished_function)
+        let finished_function = finished_ctx.function;
+        let upvalues = finished_ctx.upvalues;
+
+        Ok((upvalues, finished_function))
     }
 
     #[inline]
@@ -269,9 +280,10 @@ impl<'c> Compiler {
             }
             // TODO: Handle index > 255 if needed (Op::Get/SetLocalLong)
             Ok((Op::GetLocal(index), Op::SetLocal(index)))
+        } else if let Some(index) = self.resolve_upvalue(id_name, true) {
+            Ok((Op::GetUpvalue(index), Op::SetUpvalue(index)))
         } else {
             // Assume global
-            // TODO: Add upvalue resolution here later
             let index = self.emit_const(id_name.clone())?;
             // TODO: Handle index > 255 if needed (Op::Get/SetGlobalLong)
             Ok((Op::GetGlobal(index), Op::SetGlobal(index)))
@@ -370,6 +382,41 @@ impl<'c> Compiler {
         self.emit_op(Op::Nil);
         self.emit_op(Op::Return);
         Ok(())
+    }
+
+    fn resolve_upvalue(&mut self, name: &String, local: bool) -> Option<usize> {
+        fn resolve_upvalue_inner(
+            compiler: &mut Compiler,
+            name: &String,
+            local: bool,
+            context_index: usize,
+        ) -> Option<usize> {
+            if let Some(enclosing_context) = compiler.context.get(context_index) {
+                if let Some((local_index, _)) = enclosing_context.lookup_local(name) {
+                    if let Some(UpvalueRecord { index, .. }) = compiler
+                        .current_context()
+                        .upvalues
+                        .iter()
+                        .find(|upvalue| upvalue.index == local_index && upvalue.local == local)
+                    {
+                        return Some(*index);
+                    } else {
+                        let upvalue = UpvalueRecord {
+                            index: local_index,
+                            local,
+                        };
+                        compiler.current_context_mut().upvalues.push(upvalue);
+                        return Some(compiler.current_context().upvalues.len() - 1);
+                    }
+                } else {
+                    return resolve_upvalue_inner(compiler, name, local, context_index - 1);
+                }
+            }
+
+            None
+        }
+
+        resolve_upvalue_inner(self, name, local, self.context.len() - 2)
     }
 }
 
@@ -677,7 +724,7 @@ impl Visitor for Compiler {
         // Compile the function body
         self.visit_stmt(body)?;
 
-        let compiled_function = self.end_function_context()?;
+        let (upvalues, compiled_function) = self.end_function_context()?;
 
         // --- Back in the outer context ---
 
@@ -686,6 +733,11 @@ impl Visitor for Compiler {
 
         // Emit Op::Closure to create the runtime closure object
         self.emit_op(Op::Closure(const_index));
+
+        for upvalue in upvalues {
+            self.emit_const(upvalue.local)?;
+            self.emit_const(upvalue.index)?;
+        }
 
         // Define the variable (global or local) holding the closure
         // Need the name as a constant if global

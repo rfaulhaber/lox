@@ -112,6 +112,13 @@ impl<'s> From<&'s str> for Value {
     }
 }
 
+impl From<usize> for Value {
+    fn from(value: usize) -> Self {
+        // TODO tryfrom instead?
+        Value::Number(Number::Int(value.try_into().unwrap()))
+    }
+}
+
 impl Into<Number> for lox_source::ast::expr::Number {
     fn into(self) -> Number {
         match self {
