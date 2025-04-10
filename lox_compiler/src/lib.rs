@@ -416,6 +416,10 @@ impl<'c> Compiler {
             None
         }
 
+        if self.context.len() < 2 {
+            return None;
+        }
+
         resolve_upvalue_inner(self, name, local, self.context.len() - 2)
     }
 }
