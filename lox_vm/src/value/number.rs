@@ -7,9 +7,21 @@ pub enum Number {
 impl Number {
     pub(crate) fn is_zero(&self) -> bool {
         match self {
-            Number::Int(0) |  Number::Float(0.0) => true,
+            Number::Int(0) | Number::Float(0.0) => true,
             _ => false,
         }
+    }
+}
+
+impl From<i64> for Number {
+    fn from(value: i64) -> Self {
+        Number::Int(value)
+    }
+}
+
+impl From<f64> for Number {
+    fn from(value: f64) -> Self {
+        Number::Float(value)
     }
 }
 

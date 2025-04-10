@@ -60,13 +60,19 @@ pub enum Value {
 
 impl From<f64> for Value {
     fn from(value: f64) -> Self {
-        Value::Number(Number::Float(value))
+        Value::Number(Number::from(value))
     }
 }
 
 impl From<i64> for Value {
     fn from(value: i64) -> Self {
-        Value::Number(Number::Int(value))
+        Value::Number(Number::from(value))
+    }
+}
+
+impl From<i32> for Value {
+    fn from(value: i32) -> Self {
+        Value::Number(Number::Int(i64::from(value)))
     }
 }
 

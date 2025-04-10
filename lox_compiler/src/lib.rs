@@ -391,26 +391,30 @@ impl<'c> Compiler {
             local: bool,
             context_index: usize,
         ) -> Option<usize> {
-            if let Some(enclosing_context) = compiler.context.get(context_index) {
-                if let Some((local_index, _)) = enclosing_context.lookup_local(name) {
-                    if let Some(UpvalueRecord { index, .. }) = compiler
-                        .current_context()
-                        .upvalues
-                        .iter()
-                        .find(|upvalue| upvalue.index == local_index && upvalue.local == local)
-                    {
-                        return Some(*index);
-                    } else {
-                        let upvalue = UpvalueRecord {
-                            index: local_index,
-                            local,
-                        };
-                        compiler.current_context_mut().upvalues.push(upvalue);
-                        return Some(compiler.current_context().upvalues.len() - 1);
+            if context_index < 2 {
+                return None;
+            }
+
+            match compiler.context.get(context_index) {
+                Some(enclosing_context) => match enclosing_context.lookup_local(name) {
+                    Some((local_index, _)) => {
+                        match compiler.current_context().upvalues.iter().find(|upvalue| {
+                                                        upvalue.index == local_index && upvalue.local == local
+                                                    }) {
+                            Some(UpvalueRecord { index, .. }) => return Some(*index),
+                            None => {
+                                                    let upvalue = UpvalueRecord {
+                                                        index: local_index,
+                                                        local,
+                                                    };
+                                                    compiler.current_context_mut().upvalues.push(upvalue);
+                                                    return Some(compiler.current_context().upvalues.len() - 1);
+                                                }
+                        }
                     }
-                } else {
-                    return resolve_upvalue_inner(compiler, name, local, context_index - 1);
-                }
+                    None => return resolve_upvalue_inner(compiler, name, local, context_index - 1),
+                },
+                _ => (),
             }
 
             None
